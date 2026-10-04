@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# PyInstaller 构建产物
+build/
+dist/
+dist-installer/
+
+# InnoSetup 工具（第三方）
+tools/
+
+# 输出文件
+*.exe
+*.iss.bak
+output/
