@@ -1,7 +1,7 @@
 <h1 align="center">考试倒计时</h1>
 
 <p align="center">
-  <img src="icon.png" width="128" alt="考试倒计时图标">
+  <img src="icon.ico" width="128" alt="考试倒计时图标">
 </p>
 
 <p align="center">
