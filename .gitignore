@@ -17,3 +17,7 @@ tools/
 *.exe
 *.iss.bak
 output/
+
+# 本地备份 / 测试产物
+_acrylic_backup/
+_test_config/

@@ -2,7 +2,10 @@
 ; 编译： tools\InnoSetup6\ISCC.exe installer.iss
 
 #define AppName "高考倒计时"
-#define AppVersion "1.1.0"
+#define AppVersion "0.5.1"
+; VersionInfoVersion 必须是 X.X.X.X 纯数字、安装包文件名不能带空格，改版本时这两处一起改
+#define VersionNum "0.5.1.0"
+#define FileTag "0.5.1"
 #define AppPublisher "李沐泽"
 #define AppExeName "GaokaoCountdown.exe"
 #define RunValueName "GaokaoCountdown"
@@ -14,15 +17,15 @@ AppName={#AppName}
 AppVersion={#AppVersion}
 AppVerName={#AppName} {#AppVersion}
 AppPublisher={#AppPublisher}
-VersionInfoVersion={#AppVersion}
+VersionInfoVersion={#VersionNum}
 DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
 ; 按用户安装，不需要管理员权限
 PrivilegesRequired=lowest
 OutputDir=dist-installer
-OutputBaseFilename={#AppName}-Setup-{#AppVersion}
-SetupIconFile=app.ico
+OutputBaseFilename={#AppName}-Setup-{#FileTag}
+SetupIconFile=icon.ico
 UninstallDisplayIcon={app}\{#AppExeName}
 UninstallDisplayName={#AppName} {#AppVersion}
 Compression=lzma2/max

@@ -1,23 +1,20 @@
 @echo off
-rem ä¸€é”®é‡æ–°æ‰“åŒ…ï¼šç”Ÿæˆå›¾æ ‡ -> PyInstaller æ‰“åŒ… -> Inno Setup ç¼–è¯‘å®‰è£…åŒ…
+rem Ò»¼üÖØĞÂ´ò°ü£ºPyInstaller ´ò°üÖ÷³ÌĞò -> Inno Setup ±àÒë°²×°°ü
 cd /d "%~dp0"
 
-echo [1/3] ç”Ÿæˆå›¾æ ‡ app.ico ...
-python make_icon.py || goto :err
+echo [1/2] ´ò°üÖ÷³ÌĞò£¨Ä¿Â¼°æ£¬¹©°²×°°üÊ¹ÓÃ£©...
+python -m PyInstaller --noconfirm --clean --windowed --icon icon.ico --add-data "icon.ico;." --name GaokaoCountdown main.py || goto :err
 
-echo [2/3] æ‰“åŒ…ä¸»ç¨‹åºï¼ˆç›®å½•ç‰ˆï¼Œä¾›å®‰è£…åŒ…ä½¿ç”¨ï¼‰...
-python -m PyInstaller --noconfirm --clean --windowed --icon app.ico --name GaokaoCountdown main.py || goto :err
-
-echo [3/3] ç¼–è¯‘å®‰è£…åŒ… setup.exe ...
+echo [2/2] ±àÒë°²×°°ü setup.exe ...
 "tools\InnoSetup6\ISCC.exe" installer.iss || goto :err
 
 echo.
-echo æ‰“åŒ…å®Œæˆï¼šå®‰è£…åŒ…åœ¨ dist-installer\ ç›®å½•ä¸‹
+echo ´ò°üÍê³É£º°²×°°üÔÚ dist-installer\ Ä¿Â¼ÏÂ
 pause
 exit /b 0
 
 :err
 echo.
-echo æ‰“åŒ…å¤±è´¥ï¼Œè¯·æŸ¥çœ‹ä¸Šé¢çš„é”™è¯¯è¾“å‡ºã€‚
+echo ´ò°üÊ§°Ü£¬Çë²é¿´ÉÏÃæµÄ´íÎóÊä³ö¡£
 pause
 exit /b 1

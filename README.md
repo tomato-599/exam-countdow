@@ -1,117 +1,143 @@
-# 高考倒计时悬浮窗
+<h1 align="center">考试倒计时</h1>
 
-一个基于 **PyQt6** 的 Windows 桌面悬浮倒计时，显示「距离高考还有 X 天」。
+<p align="center">
+  <img src="icon.png" width="128" alt="考试倒计时图标">
+</p>
 
-## 功能
+<p align="center">
+  <img alt="Python 3.13.14" src="https://img.shields.io/badge/Python-3.13.14-3776AB?style=flat-square&logo=python&logoColor=white">
+  <img alt="PyQt6" src="https://img.shields.io/badge/PyQt6-6.11-41CD52?style=flat-square&logo=qt&logoColor=white">
+  <img alt="Windows 10 | 11" src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?style=flat-square">
+  <a href="https://github.com/deepseek-ai/deepseek-harness"><img alt="Powered by DSH" src="https://img.shields.io/badge/Powered_by-DSH-4D6BFE?style=flat-square&logo=deepseek&logoColor=white"></a>
+  <a href="https://github.com/deepseek-ai/deepseek-harness"><img alt="DeepSeek V4 Flash" src="https://img.shields.io/badge/DeepSeek-V4_Flash-4D6BFE?style=flat-square&logo=deepseek&logoColor=white"></a>
+</p>
 
-| 功能 | 说明 |
-| --- | --- |
-| 置顶悬浮窗 | 无边框、圆角、半透明，固定在**屏幕右上角**，不占任务栏、不进 Alt+Tab |
-| 鼠标悬停隐藏 | 鼠标移上去悬浮窗立刻隐藏，光标离开原位置后自动恢复，完全不挡点击 |
-| 场景自动隐藏 | 检测到**希沃白板 / 希沃视频展台**等程序在前台时自动隐藏，切回后自动出现 |
-| 系统托盘 | 常驻托盘（红色「考」字图标），右键菜单：显示/隐藏、立即刷新、设置…、编辑设置（JSON）…、重新读取配置、开机自动启动、**关于**、退出 |
-| 关于 / 设置 JSON | 托盘右键「关于」可看到版本、配置文件路径、**当前设置以 JSON 完整列出**，另有字段说明页；可直接在窗口里编辑 JSON 保存生效 |
-| 设置项 | 截止日期时间、显示文字模板、归零/结束文字、字号、颜色、不透明度、自启开关、自动隐藏关键词 |
-| 多倒计时轮播 | 可配置多条倒计时（如 一模 / 二模 / 高考 / 寒假），悬浮窗每隔 N 秒自动轮换显示，托盘「下一个倒计时」可手动切换 |
-| 颜色 | 跟随系统（浅色/深色自动切换）或自定义文字色 + 背景色 + 不透明度 |
-| 紧急样式 | 剩余天数 **< 10 天**：数字字号变大且变红（阈值和字号可调） |
-| 归零 | 剩余天数 **== 0**：显示「旗开得胜，未来可期！」（可自定义） |
-| 开机自启 | 默认开启，写入 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`，可在设置或托盘菜单关闭 |
+**考试倒计时**（exam-count）是一款面向高考、中考、考研等考试场景的 Windows 桌面倒计时悬浮窗。置顶显示、无边框圆角、半透明，常驻系统托盘；支持多倒计时轮播、只计上学日、希沃白板前台自动隐藏、联网更新节假日数据与新版本提示。
 
-## 安装与运行
+## 功能特性
 
-需要 Windows + Python 3.9 以上（已在 Python 3.13 + PyQt6 6.11 上验证）。
+- **置顶悬浮窗**：无边框、圆角、半透明，默认位于屏幕右上角，不占任务栏、不进 Alt+Tab；
+- **悬停隐藏**：鼠标移到窗口上自动隐藏，移开后恢复，不挡桌面点击；
+- **拖拽记忆**：按住鼠标左键从窗外滑到窗口上即可拖动，松手后自动记住位置；
+- **多倒计时轮播**：一模 / 二模 / 高考 / 寒假等多条倒计时隔几秒自动切换，也可手动切换；
+- **只计上学日**：扣除周末、法定节假日，调休补班的周末计入，按真实上课天数倒计时；
+- **场景自动隐藏**：希沃白板 / 视频展台在前台时自动隐藏，切回桌面自动出现；
+- **联网更新**：节假日 / 调休数据从 GitHub 拉取，多镜像自动回退，本地缓存断网可用；
+- **新版本提示**：启动后与每 24 小时检查一次版本，发现新版本只在托盘提示，不自动更新；
+- **外观与设置**：仿 Fluent 标签页设置界面，深浅色跟随系统，可自定义字号、颜色、透明度；
+- **托盘常驻**：导入 / 导出配置、编辑 JSON、开机自启、立即刷新、关于等一应俱全。
+
+## 安装说明
+
+### 方式一：安装包（推荐）
+
+从 [Releases](https://github.com/tomato-599/exam-countdow/releases) 下载最新的 Setup 安装包，双击按向导安装：
+
+- 按用户安装到 `%LOCALAPPDATA%\Programs\`，**不需要管理员权限**，不弹 UAC；
+- 自动创建开始菜单快捷方式，桌面快捷方式可选；
+- 安装完成后自动启动，并默认开启开机自启（可随时关闭）；
+- 带完整卸载程序，卸载时清理快捷方式与自启项，个人配置保留。
+
+系统要求：**Windows 10 / 11（x64）**。
+
+### 方式二：源码运行
+
+需要 Python 3.13.x：
 
 ```bat
-:: 1. 安装依赖
+git clone https://github.com/tomato-599/exam-countdow.git
+cd exam-count
 python -m pip install -r requirements.txt
-
-:: 2. 运行（不弹黑框）
 pythonw main.py
 ```
 
-也可以直接双击 `安装依赖.bat` 和 `启动倒计时.bat`。
+也可以直接双击仓库里的 `安装依赖.bat` 安装依赖、`启动倒计时.bat` 启动程序。
 
-> 如果 PyQt6 报 `ImportError: DLL load failed while importing QtCore`，说明 `PyQt6` 绑定版本和 `PyQt6-Qt6` 运行库版本不匹配，执行：
-> `python -m pip install -U "PyQt6>=6.10"`
+> 如果启动时报 `ImportError: DLL load failed while importing QtCore`，说明 PyQt6 绑定与 Qt 运行库版本不匹配，执行 `python -m pip install -U "PyQt6>=6.10"`。
 
-## 使用说明
+## 使用方法
 
-1. 启动后悬浮窗出现在右上角，托盘出现图标。
-2. **鼠标一移到窗口上它就消失**——这是特意设计的，避免挡住你点桌面图标；光标移开后它自己回来。
-3. 右下角托盘图标 **单击** = 显示/隐藏悬浮窗，**双击** = 打开设置，**右键** = 完整菜单：
-   - **设置…**：图形化设置界面（带实时预览）
-   - **编辑设置（JSON）…**：直接改 JSON，保存后立即生效，含「格式化」「填入默认值」
-   - **重新读取配置**：丢掉内存里的设置，重新从 `config.json` 读取
-   - **关于**：版本信息 + 当前设置 JSON 列表 + 字段说明，可一键复制 JSON、打开配置文件夹
-4. 设置里「显示文字」支持占位符：
-   - `{time}` 或 `{days}` → 剩余天数（这个数字会被单独放大/变红）
-   - `{date}` → 截止日期
-   - `{name}` → 事件名称（多倒计时时用）
-   - 例：`距离高考还有 {time} 天`、`{time} 天后上战场！`
-   - 模板里不写占位符时，天数会自动补在文字后面。
-5. **多倒计时轮播**：设置里「多倒计时列表」每行写一个，格式 `名称 | 截止时间 | 可选模板`：
+1. 启动后悬浮窗出现在屏幕右上角，系统托盘出现图标。
+2. 鼠标移到悬浮窗上它会隐藏（避免挡住桌面图标），光标移开后自动恢复；按住鼠标左键从窗外滑到窗口上即可拖动，松手后位置自动保存。
+3. 托盘操作：**单击**显示 / 隐藏悬浮窗，**双击**打开设置，**右键**打开完整菜单。
+4. 托盘菜单包含：设置…、编辑设置（JSON）…、导出 / 导入配置…、重新读取配置、节假日数据状态与立即更新、检查新版本、开机自动启动、关于、退出。
+5. 设置界面分为 **倒计时 / 多倒计时 / 外观 / 行为** 四个标签页，改动带实时预览，点「确定」立即生效。
+6. 「显示文字」模板支持占位符：`{time}` 或 `{days}` = 剩余天数，`{date}` = 截止日期，`{name}` = 事件名称。例如 `距离{name}还有 {time} 天`。
+7. 多倒计时列表每行一条，格式为 `名称 | 截止时间 | 可选模板`：
 
-   ```
-   一模 | 2027-03-10 09:00
-   二模 | 2027-05-05 09:00 | 距离{name}还有 {time} 天
-   高考 | 2027-06-07 09:00
-   ```
+```text
+一模 | 2027-03-10 09:00
+二模 | 2027-05-05 09:00 | 距离{name}还有 {time} 天
+高考 | 2027-06-07 09:00
+```
 
-   - 填了列表就按列表轮播（间隔由「多倒计时轮播间隔」控制，默认 5 秒），留空则只显示上面那个单个倒计时。
-   - 某行没写模板时用「多倒计时默认模板」（默认 `距离{name}还有 {time} 天`）。
-   - 窗口会按最长的一条预留宽度，轮播时不会左右跳动。
-   - 托盘右键「下一个倒计时」可手动切换；托盘悬停提示里会列出全部条目。
-   - 归零 / 已过文字也支持 `{name}`，例如把归零文字写成 `{name}就是今天！`。
-6. 若还有别的程序需要「前台自动隐藏」，在设置里把进程名或窗口标题关键词加进「自动隐藏的程序关键词」（英文逗号分隔）。
+8. 配置文件位于 `%APPDATA%\GaokaoCountdown\config.json`，首次运行自动生成；直接编辑该文件或在托盘「编辑设置（JSON）…」中修改均可，删除后恢复默认。运行日志在同目录的 `error.log`。
+9. 需要更多程序触发「前台自动隐藏」时，在设置里把进程名或窗口标题关键词加入「自动隐藏的关键词」（英文逗号分隔）。
 
-## 配置文件 config.json
+## 技术栈 / 库
 
-`%APPDATA%\GaokaoCountdown\config.json`（若该目录不可写，会退回到程序目录下的 `config\`）。
+| 类别 | 说明 |
+| --- | --- |
+| 语言 | Python 3.13.14 |
+| GUI | PyQt6 6.11（Qt 6 Widgets，手写 QSS 实现仿 Fluent 界面） |
+| 系统集成 | ctypes 调用 Win32 API（注册表开机自启、命名互斥体单实例、前台窗口检测）；QSystemTrayIcon 系统托盘 |
+| 网络 / 数据 | 标准库 urllib.request + json：GitHub raw 与 jsDelivr 多镜像、失败自动回退、本地缓存 |
+| 打包 | PyInstaller 6.14 + Inno Setup 6.7.3（免安装版位于 `tools\InnoSetup6\`） |
+| 图标 | `icon.ico` / `icon.png`（运行时从 `sys._MEIPASS` 加载） |
 
-- **每次启动都会重新读取这个文件**；首次运行会自动把它写出来，方便直接查看和编辑。
-- 设置界面、JSON 编辑器、托盘「重新读取配置」三条路径操作的都是同一个文件。
-- 字段名和含义：托盘右键「关于」→「字段说明」页，或直接看文件里带中文注释的默认值。
-- JSON 里的非法值会被自动兜底（字号越界会被夹到合法区间、颜色不合法回退默认、未知字段忽略），不会因为手改坏文件而启动失败。
-- 删除该文件即可恢复全部默认设置。运行出错的日志在同目录的 `error.log`。
+## 数据与联网
 
-默认截止时间为**下一个 6 月 7 日 09:00**，首次打开请在设置里改成你自己的日期。
+- **节假日数据**：默认从 `tomato-599/holidays_count` 仓库的 `holidays.json` 获取，raw 失败自动切换 jsDelivr 镜像；启动时检查、每 6 小时缓存过期策略，断网时使用本地缓存与内置数据；
+- **版本检查**：同一仓库根目录的 `version.json`（一行版本号，如 `0.5.1`），启动 2 秒后与每 24 小时检查，只在托盘提示新版本，**不自动下载、不自动安装**；
+- 数据源可在 `config.json` 的 `holiday_repo` / `holiday_branch` / `holiday_file` 中修改。
 
-## 打包与分发
-
-只做 **Inno Setup 安装版**，不提供绿色版。
-
-| 产物 | 路径 | 说明 |
-| --- | --- | --- |
-| 安装包 | `dist-installer\高考倒计时-Setup-1.1.0.exe` | 25 MB 左右，中文安装向导，**按用户安装、不需要管理员权限** |
-
-安装包会做的事：
-
-1. 安装到 `%LOCALAPPDATA%\Programs\高考倒计时`（不写 Program Files，所以不弹 UAC）；
-2. 创建开始菜单快捷方式，桌面快捷方式可选（默认勾选）；
-3. 写入开机自启项 `HKCU\...\CurrentVersion\Run\GaokaoCountdown`（安装时可取消勾选，之后也能在软件设置里关）；
-4. 安装完成后自动启动程序；
-5. 带完整卸载程序，卸载时一并清掉快捷方式、自启项和注册表登记项（`%APPDATA%\GaokaoCountdown` 里的个人设置会保留）。
-
-### 改完代码后重新打包
-
-直接双击 `打包安装包.bat` 即可（生成图标 → 打包目录版 → 编译安装包）。其内部等价于：
+## 从仓库克隆并打包
 
 ```bat
-python make_icon.py
-python -m PyInstaller --noconfirm --clean --windowed --icon app.ico --name GaokaoCountdown main.py
+git clone https://github.com/tomato-599/exam-countdow.git
+cd exam-count
+python -m pip install -r requirements.txt
+```
+
+确认源码可正常运行后，双击 `打包安装包.bat` 一键打包，它依次执行：
+
+```bat
+python -m PyInstaller --noconfirm --clean --windowed --icon icon.ico --add-data "icon.ico;." --name GaokaoCountdown main.py
 tools\InnoSetup6\ISCC.exe installer.iss
 ```
 
-- 打包工具：`PyInstaller 6.14`（已安装在 Python 环境）+ `Inno Setup 6.7.3`（免安装版，放在 `tools\InnoSetup6\`，不占用系统安装目录）。
-- 修改版本号、发布者、安装选项请编辑 `installer.iss` 顶部的 `#define` 与 `[Setup]` 段。
-- 图标由 `make_icon.py` 生成（红底圆角「考」字，7 种尺寸打包成 `app.ico`）。
-- 打包后的程序会自动用 `sys.executable`（即 exe 自身）作为自启命令，`--windowed` 保证无控制台窗口。
-- `dist\GaokaoCountdown\` 是安装包的打包源（PyInstaller 目录版）；改完代码必须重新生成它，安装包才会包含新代码。
+- 产物：`dist\GaokaoCountdown\`（PyInstaller 目录版）与 `dist-installer\` 下的 Setup 安装包；
+- 打包依赖：PyInstaller（`python -m pip install pyinstaller`）与 Inno Setup 6；`tools\` 为第三方工具目录，默认不入库，克隆后请把 Inno Setup 6 解压到 `tools\InnoSetup6\`；
+- 改版本号需同步修改 `countdown/constants.py` 的 `APP_VERSION` 和 `installer.iss` 顶部的 `AppVersion` / `VersionNum` / `FileTag`；
+- `打包安装包.bat` 为 GBK + CRLF 编码，编辑时请保持原编码，否则 cmd 会解析报错。
+
+## 项目结构
+
+```text
+countdown/          # 应用模块：悬浮窗、托盘、设置界面、节假日数据、版本检查
+main.py             # 程序入口
+icon.ico / icon.png # 应用图标
+installer.iss       # Inno Setup 安装脚本
+打包安装包.bat       # 一键打包：PyInstaller + Inno Setup
+tools/InnoSetup6/   # 免安装版 Inno Setup
+```
 
 ## 说明
 
-- 天数按**自然日**计算：`(截止日期 - 今天).days`，与当天具体时刻无关。
-- 天数 `< 0`（截止日期已过）时显示设置里的「截止日期已过显示」文字，默认「高考已结束，愿你前程似锦！」。
-- 首次运行会写入开机自启项；不想要的话在设置里取消「开机自动启动」。
-- 程序为单实例，重复启动会静默退出。
+- 天数按**自然日**计算；开启「只计上学日」后，改为统计 `(今天, 截止日期]` 区间内的上课天数（扣除周末与法定节假日，调休补班的周末计入）；
+- 默认截止时间为下一个 6 月 7 日 09:00，首次运行请在设置里改成自己的日期；
+- 未来年份的放假安排为预估数据，官方通知发布后随节假日在线数据更新；
+- 程序为**单实例**，重复启动会静默退出；
+- 配置中的非法值会自动兜底，手改 `config.json` 不会导致启动失败。
+
+## Powered by
+
+本项目在开发、构建与运行过程中使用或接入了以下平台与工具：
+
+- **[DeepSeek 开放平台](https://platform.deepseek.com/)** — 模型 API
+- **[OpenRouter](https://openrouter.ai/)** — 多模型统一接入
+- **[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)** — 开发工具链
+- **[Qoder](https://qoder.com/)** — AI 编程 IDE
+- **Qwen** — 通义千问模型
+
+感谢以上平台与开源社区的支持。
