@@ -1,7 +1,7 @@
 <h1 align="center">考试倒计时</h1>
 
 <p align="center">
-  <img src="icon.ico" width="128" alt="考试倒计时图标">
+  <img src="icon.ico" alt="考试倒计时图标">
 </p>
 
 <p align="center">
@@ -128,16 +128,18 @@ tools/InnoSetup6/   # 免安装版 Inno Setup
 - 默认截止时间为下一个 6 月 7 日 09:00，首次运行请在设置里改成自己的日期；
 - 未来年份的放假安排为预估数据，官方通知发布后随节假日在线数据更新；
 - 程序为**单实例**，重复启动会静默退出；
-- 配置中的非法值会自动兜底，手改 `config.json` 不会导致启动失败。
+- 配置中的非法值会自动兜底，手改 `config.json` 不会导致启动失败；
+- 本项目大部分使用Vibe Coding，若有问题，欢迎提交 Issue（改正代码绝对100%真人含量）。
 
-## Powered by
+## 特别感谢
 
-本项目在开发、构建与运行过程中使用或接入了以下平台与工具：
+本项目在开发、构建与运行过程中，使用或接入了下列平台与工具（排名不分先后）。谨向以下平台及开源社区致以由衷的感谢：
 
-- **[DeepSeek 开放平台](https://platform.deepseek.com/)** — 模型 API
+- **[DeepSeek 开放平台](https://platform.deepseek.com/)** — DeepSeek模型 API
 - **[OpenRouter](https://openrouter.ai/)** — 多模型统一接入
 - **[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)** — 开发工具链
-- **[Qoder](https://qoder.com/)** — AI 编程 IDE
-- **Qwen** — 通义千问模型
+- **[Qoder](https://qoder.com/)** — 开发工具链
+- **[Qwen](https://qwen.ai/)** — 通义千问模型
+- **[Canva](https://www.canva.cn/)** — 图标绘制
 
-感谢以上平台与开源社区的支持。
+感谢各平台提供的模型能力、接入服务与工具链支持。
