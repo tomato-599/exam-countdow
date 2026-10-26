@@ -9,7 +9,7 @@ from datetime import date
 
 APP_ID = "GaokaoCountdown"          # 注册表 / 互斥体使用的名字
 APP_TITLE = "高考倒计时"
-APP_VERSION = "0.5.1"
+APP_VERSION = "0.7.1"
 APP_AUTHOR = "L"
 APP_DESC = "置顶悬浮的高考倒计时 · 希沃前台自动隐藏 · 托盘常驻"
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
@@ -36,9 +36,11 @@ DEFAULT_HIDE_KEYWORDS = ["easinote", "easicamera", "希沃白板", "希沃视频
 
 DEFAULT_CONFIG = {
     "deadline": default_deadline(),          # 截止日期时间
+    "duration_days": 1,                      # 考试持续天数（含截止当天）
     "template": "距离{name}还有 {time} 天",     # {time}/{days} = 天数
     "zero_text": "旗开得胜",       # 天数 == 0
-    "past_text": "考试已结束",  # 天数 < 0
+    "ongoing_text": "考试进行中 · 第{day}天",  # 多天考试进行中
+    "past_text": "考试已结束",  # 考试全部结束
     "zero_font_size": 30,                    # 归零/结束时字号
     "base_font_size": 20,                    # 常态文字字号
     "urgent_days": 10,                       # 小于该天数进入“紧急”样式
@@ -67,10 +69,12 @@ DEFAULT_CONFIG = {
 
 # 每个配置项的中文说明（“关于 / 设置(JSON)”里会一并列出）
 CONFIG_FIELDS: dict[str, str] = {
-    "deadline": "截止日期时间，ISO 格式 YYYY-MM-DD HH:MM:SS",
+    "deadline": "截止日期时间（即开考时间），ISO 格式 YYYY-MM-DD HH:MM:SS",
+    "duration_days": "考试持续天数（含截止当天），1 ~ 365；留空按 1 天",
     "template": "显示文字模板，{time} 或 {days} = 剩余天数，{date} = 截止日期",
-    "zero_text": "剩余天数为 0（高考当天）时显示的文字",
-    "past_text": "截止日期已过时显示的文字",
+    "zero_text": "剩余天数为 0（考试第一天）时显示的文字",
+    "ongoing_text": "多天考试进行中显示的文字，支持 {name}/{day}/{total}/{date}",
+    "past_text": "考试全部结束后显示的文字",
     "base_font_size": "常态文字字号（px）",
     "urgent_font_size": "紧急状态下数字字号（px）",
     "zero_font_size": "归零 / 结束时文字字号（px）",
@@ -90,7 +94,7 @@ CONFIG_FIELDS: dict[str, str] = {
     "holiday_file": "仓库里的 JSON 文件路径，默认 holidays.json",
     "holiday_auto": "是否自动定时从 GitHub 获取节假日数据（获取失败不影响使用）",
     "holiday_cache_hours": "自动更新检查间隔（小时），1 ~ 168",
-    "events": "多倒计时列表，每项 {\"name\": 名称, \"deadline\": 截止时间, \"template\": 可选单独模板}",
+    "events": "多倒计时列表，每项 {\"name\": 名称, \"deadline\": 截止时间, \"template\": 可选单独模板, \"duration_days\": 持续天数}",
     "rotate_seconds": "多倒计时轮播间隔（秒），2 ~ 600",
     "event_template": "多倒计时条目没写自己模板时使用的文字模板（支持 {name}）",
 }

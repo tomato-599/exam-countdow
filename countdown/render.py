@@ -45,6 +45,8 @@ def count_days(cfg: dict, raw) -> int:
         return 0
     today = date.today()
     if cfg.get("school_days"):
+        if dt.date() < today:
+            return (dt.date() - today).days
         return school_days_between(today, dt.date())
     return (dt.date() - today).days
 
@@ -52,6 +54,32 @@ def count_days(cfg: dict, raw) -> int:
 def days_left(cfg: dict) -> int:
     """主倒计时的剩余天数。"""
     return count_days(cfg, cfg.get("deadline"))
+
+
+def duration_days(cfg: dict, item: dict | None = None) -> int:
+    """考试持续天数：条目优先，留空回退到全局设置，最少 1 天。"""
+    raw = (item or {}).get("duration_days")
+    if raw is None or str(raw).strip() == "":
+        raw = cfg.get("duration_days", DEFAULT_CONFIG["duration_days"])
+    try:
+        return max(1, min(365, int(raw)))
+    except Exception:
+        return 1
+
+
+def exam_progress(cfg: dict, item: dict | None = None) -> tuple[int, int] | None:
+    """多天考试进行中时返回 (第几天, 共几天)，否则返回 None。"""
+    raw = (item or {}).get("deadline") or cfg.get("deadline")
+    dt = parse_deadline(raw)
+    if dt is None:
+        return None
+    total = duration_days(cfg, item)
+    if total <= 1:
+        return None
+    offset = (date.today() - dt.date()).days
+    if 0 < offset < total:
+        return offset + 1, total
+    return None
 
 
 def resolve_texts(cfg: dict, item: dict | None) -> tuple[str, str, str, str]:
@@ -77,6 +105,24 @@ def _esc(text: str) -> str:
     return html.escape(text).replace(" ", "&nbsp;")
 
 
+def format_ongoing(
+    cfg: dict, item: dict | None, day: int, total: int
+) -> str:
+    """展开多天考试进行中的文字模板。"""
+    item = item or {}
+    name = str(item.get("name") or "")
+    date_text = str(item.get("deadline") or cfg.get("deadline") or "")[:10]
+    template = str(cfg.get("ongoing_text") or "").strip()
+    if not template:
+        template = DEFAULT_CONFIG["ongoing_text"]
+    return (
+        template.replace("{name}", name)
+        .replace("{date}", date_text)
+        .replace("{day}", str(day))
+        .replace("{total}", str(total))
+    )
+
+
 def build_html(cfg: dict, days: int, item: dict | None = None) -> str:
     text_color, _bg = resolve_colors(cfg)
     urgent_color = cfg.get("urgent_color", "#E53935")
@@ -86,9 +132,13 @@ def build_html(cfg: dict, days: int, item: dict | None = None) -> str:
 
     template, zero_text, past_text, name = resolve_texts(cfg, item)
 
-    # 当天 / 已过
+    # 考试第一天 / 多天考试进行中 / 已结束
     if days <= 0:
-        text = (zero_text if days == 0 else past_text) or zero_text or ""
+        progress = exam_progress(cfg, item)
+        if progress:
+            text = format_ongoing(cfg, item, *progress)
+        else:
+            text = (zero_text if days == 0 else past_text) or zero_text or ""
         return (
             f'<span style="font-size:{zero_size}px;font-weight:700;'
             f'color:{urgent_color};">{_esc(text)}</span>'
@@ -126,10 +176,11 @@ def build_html(cfg: dict, days: int, item: dict | None = None) -> str:
 def plain_text(cfg: dict, days: int, item: dict | None = None) -> str:
     """给托盘提示用的纯文本。"""
     template, zero_text, past_text, name = resolve_texts(cfg, item)
-    if days == 0:
-        return zero_text
-    if days < 0:
-        return past_text
+    if days <= 0:
+        progress = exam_progress(cfg, item)
+        if progress:
+            return format_ongoing(cfg, item, *progress)
+        return zero_text if days == 0 else past_text
     date_text = str((item or {}).get("deadline") or cfg.get("deadline") or "")[:10]
     text = template or "{time}"
     text = text.replace("{time}", str(days)).replace("{days}", str(days))

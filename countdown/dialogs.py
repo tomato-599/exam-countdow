@@ -8,7 +8,7 @@ import os
 import tempfile
 from datetime import date, datetime
 
-from PyQt6.QtCore import QDateTime, QPointF, Qt
+from PyQt6.QtCore import QDateTime, QPointF, Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QFont, QPainter, QPen, QPixmap, QPolygonF
 from PyQt6.QtWidgets import (
     QApplication,
@@ -26,6 +26,7 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
+    QScrollArea,
     QSlider,
     QSpinBox,
     QTabWidget,
@@ -38,10 +39,9 @@ from .config import (
     CONFIG_DIR,
     CONFIG_FILE,
     config_to_json,
-    events_to_text,
     fields_to_html,
     load_config,
-    parse_events_text,
+    parse_events,
     sanitize_config,
 )
 from .constants import APP_AUTHOR, APP_DESC, APP_TITLE, APP_VERSION, DEFAULT_CONFIG
@@ -66,6 +66,7 @@ def fluent_palette() -> dict:
             "accent": "#60CDFF",
             "accent_hover": "#7BD9FF",
             "accent_text": "#1B1B1B",
+            "danger": "#FF99A4",
         }
     return {
         "bg": "#F5F5F5",
@@ -78,6 +79,7 @@ def fluent_palette() -> dict:
         "accent": "#0067C0",
         "accent_hover": "#106EBE",
         "accent_text": "#FFFFFF",
+        "danger": "#C42B1C",
     }
 
 
@@ -241,7 +243,193 @@ QSlider::handle:horizontal {{
     border-radius: 8px; background: {panel}; border: 1px solid {sub};
 }}
 QSlider::handle:horizontal:hover {{ border-color: {accent}; }}
+
+/* 动态倒计时列表 */
+QScrollArea#eventList {{
+    background: transparent;
+    border: 1px solid {border}; border-radius: 6px;
+}}
+QScrollArea#eventList > QWidget > QWidget {{ background: transparent; }}
+QPushButton#eventDelete {{
+    color: {sub}; background: transparent;
+    border: 1px solid transparent; padding: 4px 8px;
+}}
+QPushButton#eventDelete:hover {{
+    color: {danger}; background: {hover}; border-color: {border};
+}}
+QPushButton#eventDelete:pressed {{ background: {pressed}; }}
+
+QScrollBar:vertical {{
+    background: transparent; width: 8px; margin: 2px;
+}}
+QScrollBar::handle:vertical {{
+    background: {border}; border-radius: 4px; min-height: 24px;
+}}
+QScrollBar::handle:vertical:hover {{ background: {sub}; }}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{ background: transparent; }}
 """
+
+
+def _to_qdatetime(raw) -> QDateTime:
+    try:
+        dt = datetime.fromisoformat(str(raw))
+    except Exception:
+        try:
+            dt = datetime.combine(date.fromisoformat(str(raw)[:10]), datetime.min.time())
+        except Exception:
+            dt = datetime.now()
+    return QDateTime(dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second)
+
+
+class EventRow(QWidget):
+    """动态列表中的一行：名称、截止时间、持续天数、可选模板、删除。"""
+
+    changed = pyqtSignal()
+    remove_requested = pyqtSignal(object)
+
+    def __init__(self, event: dict | None, parent=None):
+        super().__init__(parent)
+        event = event or {}
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(2, 2, 2, 2)
+        layout.setSpacing(6)
+
+        self.name_edit = QLineEdit(self)
+        self.name_edit.setPlaceholderText("名称，如 一模")
+        self.name_edit.setText(str(event.get("name") or ""))
+        self.name_edit.setMinimumWidth(88)
+        self.name_edit.setToolTip("倒计时条目名称")
+
+        self.deadline_edit = QDateTimeEdit(self)
+        self.deadline_edit.setCalendarPopup(True)
+        self.deadline_edit.setDisplayFormat("yyyy-MM-dd HH:mm")
+        self.deadline_edit.setDateTime(_to_qdatetime(event.get("deadline")))
+        self.deadline_edit.setFixedWidth(190)
+        self.deadline_edit.setToolTip("这条倒计时的截止时间（开考时间）")
+
+        self.duration_spin = QSpinBox(self)
+        self.duration_spin.setRange(0, 365)
+        self.duration_spin.setSpecialValueText("留空=1天")
+        self.duration_spin.setSuffix(" 天")
+        self.duration_spin.setValue(int(event.get("duration_days") or 1))
+        self.duration_spin.setFixedWidth(104)
+        self.duration_spin.setToolTip("考试持续天数（含截止当天）；留空按 1 天")
+
+        self.template_edit = QLineEdit(self)
+        self.template_edit.setPlaceholderText("可选模板，留空用默认模板")
+        self.template_edit.setText(str(event.get("template") or ""))
+        self.template_edit.setMinimumWidth(110)
+        self.template_edit.setToolTip("支持 {name}、{time}、{date}；留空使用默认模板")
+
+        self.remove_btn = QPushButton("删除", self)
+        self.remove_btn.setObjectName("eventDelete")
+        self.remove_btn.setFixedWidth(48)
+        self.remove_btn.setToolTip("删除这条倒计时")
+        self.remove_btn.clicked.connect(lambda: self.remove_requested.emit(self))
+
+        layout.addWidget(self.name_edit, 2)
+        layout.addWidget(self.deadline_edit)
+        layout.addWidget(self.duration_spin)
+        layout.addWidget(self.template_edit, 3)
+        layout.addWidget(self.remove_btn)
+
+        self.name_edit.textChanged.connect(lambda _text: self.changed.emit())
+        self.template_edit.textChanged.connect(lambda _text: self.changed.emit())
+        self.deadline_edit.dateTimeChanged.connect(lambda _dt: self.changed.emit())
+        self.duration_spin.valueChanged.connect(lambda _value: self.changed.emit())
+
+    def is_blank(self) -> bool:
+        return not self.name_edit.text().strip() and not self.template_edit.text().strip()
+
+    def to_config(self) -> dict | None:
+        if self.is_blank():
+            return None
+        return {
+            "name": self.name_edit.text().strip(),
+            "deadline": self.deadline_edit.dateTime().toString("yyyy-MM-dd HH:mm:ss"),
+            "template": self.template_edit.text().strip(),
+            "duration_days": max(1, self.duration_spin.value()),
+        }
+
+
+class EventListWidget(QScrollArea):
+    """可增删的倒计时条目列表，顺序即轮播顺序。"""
+
+    changed = pyqtSignal()
+
+    def __init__(self, events=None, parent=None):
+        super().__init__(parent)
+        self._rows: list[EventRow] = []
+        self.setObjectName("eventList")
+        self.setWidgetResizable(True)
+        self.setFrameShape(QFrame.Shape.NoFrame)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+
+        host = QWidget(self)
+        host.setObjectName("eventListHost")
+        self._layout = QVBoxLayout(host)
+        self._layout.setContentsMargins(6, 6, 6, 6)
+        self._layout.setSpacing(6)
+
+        self._empty = QLabel("还没有倒计时条目，点击下方「添加倒计时」新建一条。", host)
+        self._empty.setObjectName("hint")
+        self._empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._layout.addWidget(self._empty)
+        self._layout.addStretch(1)
+        self.setWidget(host)
+
+        self.set_events(events)
+
+    def set_events(self, events) -> None:
+        for row in self._rows:
+            row.setParent(None)
+            row.deleteLater()
+        self._rows.clear()
+        for event in parse_events(events):
+            self.add_row(event)
+        self._sync()
+
+    def add_row(self, event: dict | None = None) -> None:
+        row = EventRow(event, self)
+        row.changed.connect(self.changed.emit)
+        row.remove_requested.connect(self._remove_row)
+        self._rows.append(row)
+        self._layout.insertWidget(self._layout.count() - 1, row)
+        self._sync()
+
+    def _remove_row(self, row: EventRow) -> None:
+        if row not in self._rows:
+            return
+        self._rows.remove(row)
+        row.setParent(None)
+        row.deleteLater()
+        self._sync()
+
+    def to_events(self) -> list[dict]:
+        events = []
+        for row in self._rows:
+            event = row.to_config()
+            if event is not None:
+                events.append(event)
+        return events
+
+    def has_events(self) -> bool:
+        return bool(self.to_events())
+
+    def _sync(self) -> None:
+        self._empty.setVisible(not self._rows)
+        if not self._rows:
+            height = 52
+        else:
+            margins = self._layout.contentsMargins()
+            content = sum(row.sizeHint().height() for row in self._rows)
+            content += self._layout.spacing() * (len(self._rows) - 1)
+            content += margins.top() + margins.bottom()
+            height = max(52, min(220, content + 2))
+        self.setFixedHeight(height)
+        self.changed.emit()
 
 
 class SettingsDialog(QDialog):
@@ -251,7 +439,7 @@ class SettingsDialog(QDialog):
         self._pal = fluent_palette()
         self.setWindowTitle(f"{APP_TITLE} - 设置")
         self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
-        self.setMinimumWidth(560)
+        self.setMinimumWidth(680)
         self.setStyleSheet(fluent_style(self._pal))
 
         tabs = QTabWidget(self)
@@ -262,8 +450,16 @@ class SettingsDialog(QDialog):
         self.deadline_edit = QDateTimeEdit(card)
         self.deadline_edit.setCalendarPopup(True)
         self.deadline_edit.setDisplayFormat("yyyy-MM-dd HH:mm")
-        self.deadline_edit.setDateTime(self._to_qdatetime(cfg.get("deadline")))
+        self.deadline_edit.setDateTime(_to_qdatetime(cfg.get("deadline")))
         form.addRow("截止日期时间：", self.deadline_edit)
+
+        self.duration_spin = QSpinBox(card)
+        self.duration_spin.setRange(0, 365)
+        self.duration_spin.setSpecialValueText("留空 = 1 天")
+        self.duration_spin.setSuffix(" 天")
+        self.duration_spin.setValue(int(cfg.get("duration_days", 1)))
+        self.duration_spin.setToolTip("考试持续天数（含截止当天）；留空按 1 天")
+        form.addRow("考试持续天数：", self.duration_spin)
         page_layout.addWidget(card)
 
         card, form = self._card(page, "显示文字")
@@ -273,7 +469,8 @@ class SettingsDialog(QDialog):
         form.addRow("显示文字：", self.template_edit)
 
         hint = QLabel(
-            "可用占位符：{time} 或 {days} = 剩余天数，{date} = 截止日期，{name} = 事件名称",
+            "可用占位符：{time} 或 {days} = 剩余天数，{date} = 截止日期，{name} = 事件名称；\n"
+            "进行中文字还支持 {day} = 第几天，{total} = 总天数。",
             card,
         )
         hint.setObjectName("hint")
@@ -282,51 +479,58 @@ class SettingsDialog(QDialog):
 
         self.zero_edit = QLineEdit(card)
         self.zero_edit.setText(str(cfg.get("zero_text", "")))
-        form.addRow("天数归零时显示：", self.zero_edit)
+        form.addRow("考试第一天显示：", self.zero_edit)
+
+        self.ongoing_edit = QLineEdit(card)
+        self.ongoing_edit.setText(str(cfg.get("ongoing_text", "")))
+        self.ongoing_edit.setPlaceholderText("考试进行中 · 第{day}天")
+        form.addRow("考试进行中显示：", self.ongoing_edit)
 
         self.past_edit = QLineEdit(card)
         self.past_edit.setText(str(cfg.get("past_text", "")))
-        form.addRow("截止日期已过显示：", self.past_edit)
+        form.addRow("考试结束后显示：", self.past_edit)
         page_layout.addWidget(card)
         page_layout.addStretch(1)
         tabs.addTab(page, "倒计时")
 
         # ---------------- 多倒计时 ----------------
         page, page_layout = self._page()
-        card, form = self._card(page, "轮播列表")
+        card, form = self._card(page, "轮播")
         self.rotate_spin = QSpinBox(card)
         self.rotate_spin.setRange(2, 600)
         self.rotate_spin.setSuffix(" 秒")
         self.rotate_spin.setValue(int(cfg.get("rotate_seconds", 5)))
         form.addRow("轮播间隔：", self.rotate_spin)
 
-        self.events_edit = QPlainTextEdit(card)
-        self.events_edit.setPlaceholderText(
-            "一模 | 2027-03-10 09:00\n二模 | 2027-05-05 09:00 | 距离{name}还有 {time} 天"
-        )
-        self.events_edit.setPlainText(events_to_text(cfg.get("events")))
-        self.events_edit.setFixedHeight(88)
-        self.events_edit.setFont(QFont("Consolas", 9))
-        form.addRow("倒计时列表：", self.events_edit)
-
-        events_hint = QLabel(
-            "每行一个：名称 | 截止时间 | 可选模板（第三段可省略）。\n"
-            "留空则只显示单个倒计时；填了就按列表轮播（此时“倒计时”页的截止日期失效）。",
-            card,
-        )
-        events_hint.setObjectName("hint")
-        events_hint.setWordWrap(True)
-        form.addRow("", events_hint)
-
         self.event_template_edit = QLineEdit(card)
         self.event_template_edit.setText(str(cfg.get("event_template", "")))
         self.event_template_edit.setPlaceholderText("距离{name}还有 {time} 天")
         form.addRow("默认模板：", self.event_template_edit)
         page_layout.addWidget(card)
+
+        card, form = self._card(page, "倒计时列表")
+        box = card.layout()
+        self.event_list = EventListWidget(cfg.get("events"), card)
+        box.addWidget(self.event_list)
+
+        add_btn = QPushButton("+ 添加倒计时", card)
+        add_btn.clicked.connect(self._add_event)
+        box.addWidget(add_btn, 0, Qt.AlignmentFlag.AlignLeft)
+
+        events_hint = QLabel(
+            "每行一条，顺序即轮播顺序；名称和模板都为空的行会被忽略。\n"
+            "每条可单独设置持续天数（留空 = 1 天，当天结束）；进行中文字在“倒计时”页统一设置。\n"
+            "条目模板留空时使用上方「默认模板」；配置列表后，“倒计时”页的截止日期和持续天数不再生效。",
+            card,
+        )
+        events_hint.setObjectName("hint")
+        events_hint.setWordWrap(True)
+        box.addWidget(events_hint)
+        page_layout.addWidget(card)
         page_layout.addStretch(1)
         tabs.addTab(page, "多倒计时")
 
-        self.events_edit.textChanged.connect(self._update_deadline_enabled)
+        self.event_list.changed.connect(self._update_deadline_enabled)
 
         # ---------------- 外观 ----------------
         page, page_layout = self._page()
@@ -471,8 +675,10 @@ class SettingsDialog(QDialog):
 
         # 联动
         self.deadline_edit.dateTimeChanged.connect(self.update_preview)
+        self.duration_spin.valueChanged.connect(self.update_preview)
         self.template_edit.textChanged.connect(self.update_preview)
         self.zero_edit.textChanged.connect(self.update_preview)
+        self.ongoing_edit.textChanged.connect(self.update_preview)
         self.past_edit.textChanged.connect(self.update_preview)
         self.base_size.valueChanged.connect(self.update_preview)
         self.urgent_days.valueChanged.connect(self.update_preview)
@@ -516,23 +722,26 @@ class SettingsDialog(QDialog):
         return card, form
 
     def _update_deadline_enabled(self) -> None:
-        """配了多倒计时列表时，单个截止日期不再起作用，置灰不可调。"""
-        has_events = bool(parse_events_text(self.events_edit.toPlainText()))
+        """配了多倒计时列表时，单个截止日期和持续天数不再起作用。"""
+        has_events = self.event_list.has_events()
         self.deadline_edit.setEnabled(not has_events)
-        self.deadline_edit.setToolTip(
-            "已配置多倒计时列表，单个倒计时不再生效" if has_events else ""
+        self.duration_spin.setEnabled(not has_events)
+        tip = "已配置多倒计时列表，单个倒计时不再生效" if has_events else ""
+        self.deadline_edit.setToolTip(tip)
+        self.duration_spin.setToolTip(
+            tip or "考试持续天数（含截止当天）；留空按 1 天"
         )
 
-    @staticmethod
-    def _to_qdatetime(raw) -> QDateTime:
-        try:
-            dt = datetime.fromisoformat(str(raw))
-        except Exception:
-            try:
-                dt = datetime.combine(date.fromisoformat(str(raw)[:10]), datetime.min.time())
-            except Exception:
-                dt = datetime.now()
-        return QDateTime(dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second)
+    def _add_event(self) -> None:
+        deadline = self.deadline_edit.dateTime().toString("yyyy-MM-dd HH:mm:ss")
+        self.event_list.add_row(
+            {
+                "name": "",
+                "deadline": deadline,
+                "template": "",
+                "duration_days": max(1, self.duration_spin.value()),
+            }
+        )
 
     def _on_color_mode(self, _index: int) -> None:
         self._sync_color_buttons()
@@ -580,8 +789,10 @@ class SettingsDialog(QDialog):
     def collect(self) -> dict:
         cfg = dict(self.cfg)
         cfg["deadline"] = self.deadline_edit.dateTime().toString("yyyy-MM-dd HH:mm:ss")
+        cfg["duration_days"] = max(1, self.duration_spin.value())
         cfg["template"] = self.template_edit.text()
         cfg["zero_text"] = self.zero_edit.text()
+        cfg["ongoing_text"] = self.ongoing_edit.text()
         cfg["past_text"] = self.past_edit.text()
         cfg["base_font_size"] = self.base_size.value()
         cfg["urgent_days"] = self.urgent_days.value()
@@ -595,7 +806,7 @@ class SettingsDialog(QDialog):
         cfg["autostart"] = self.autostart_box.isChecked()
         cfg["school_days"] = self.school_days_box.isChecked()
         cfg["holiday_auto"] = self.holiday_auto_box.isChecked()
-        cfg["events"] = parse_events_text(self.events_edit.toPlainText())
+        cfg["events"] = self.event_list.to_events()
         cfg["rotate_seconds"] = self.rotate_spin.value()
         cfg["event_template"] = self.event_template_edit.text() or DEFAULT_CONFIG["event_template"]
         cfg["hide_keywords"] = [
@@ -615,9 +826,11 @@ class SettingsDialog(QDialog):
 
     def restore_defaults(self) -> None:
         cfg = dict(DEFAULT_CONFIG)
-        self.deadline_edit.setDateTime(self._to_qdatetime(cfg["deadline"]))
+        self.deadline_edit.setDateTime(_to_qdatetime(cfg["deadline"]))
+        self.duration_spin.setValue(cfg["duration_days"])
         self.template_edit.setText(cfg["template"])
         self.zero_edit.setText(cfg["zero_text"])
+        self.ongoing_edit.setText(cfg["ongoing_text"])
         self.past_edit.setText(cfg["past_text"])
         self.base_size.setValue(cfg["base_font_size"])
         self.urgent_days.setValue(cfg["urgent_days"])
@@ -633,7 +846,7 @@ class SettingsDialog(QDialog):
         self.holiday_auto_box.setChecked(cfg["holiday_auto"])
         self.keywords_edit.setText(",".join(cfg["hide_keywords"]))
         self.rotate_spin.setValue(cfg["rotate_seconds"])
-        self.events_edit.setPlainText(events_to_text(cfg["events"]))
+        self.event_list.set_events(cfg["events"])
         self.event_template_edit.setText(cfg["event_template"])
         self._sync_color_buttons()
         self.update_preview()

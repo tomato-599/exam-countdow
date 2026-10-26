@@ -72,8 +72,16 @@ def install_excepthook() -> None:
 # --------------------------------------------------------------------------- #
 # 多倒计时条目
 # --------------------------------------------------------------------------- #
+def _duration_days(value) -> int:
+    """考试持续天数：留空、非法或小于 1 都按 1 天处理。"""
+    try:
+        return max(1, min(365, int(value)))
+    except Exception:
+        return 1
+
+
 def parse_events(raw) -> list[dict]:
-    """规范化多倒计时列表：每项 {name, deadline, template}。"""
+    """规范化多倒计时列表：每项 {name, deadline, template, duration_days}。"""
     events: list[dict] = []
     if not isinstance(raw, list):
         return events
@@ -88,37 +96,7 @@ def parse_events(raw) -> list[dict]:
                 "name": str(entry.get("name") or "").strip(),
                 "deadline": deadline,
                 "template": str(entry.get("template") or "").strip(),
-            }
-        )
-    return events
-
-
-def events_to_text(events) -> str:
-    """多倒计时 -> 设置界面的多行文本（名称 | 截止时间 | 可选模板）。"""
-    lines = []
-    for event in parse_events(events):
-        line = f"{event['name']} | {event['deadline']}"
-        if event["template"]:
-            line += f" | {event['template']}"
-        lines.append(line)
-    return "\n".join(lines)
-
-
-def parse_events_text(text: str) -> list[dict]:
-    """设置界面的多行文本 -> 多倒计时列表。"""
-    events: list[dict] = []
-    for line in str(text or "").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        parts = [p.strip() for p in line.split("|")]
-        if len(parts) < 2 or not parts[1]:
-            continue
-        events.append(
-            {
-                "name": parts[0],
-                "deadline": parts[1],
-                "template": parts[2] if len(parts) > 2 else "",
+                "duration_days": _duration_days(entry.get("duration_days")),
             }
         )
     return events
@@ -130,7 +108,12 @@ def config_items(cfg: dict) -> list[dict]:
     if events:
         return events
     return [
-        {"name": "", "deadline": str(cfg.get("deadline") or ""), "template": ""}
+        {
+            "name": "",
+            "deadline": str(cfg.get("deadline") or ""),
+            "template": "",
+            "duration_days": _duration_days(cfg.get("duration_days")),
+        }
     ]
 
 
@@ -164,8 +147,10 @@ def sanitize_config(raw) -> dict:
             {k: v for k, v in raw.items() if k in DEFAULT_CONFIG and v is not None}
         )
     data["deadline"] = str(data.get("deadline") or DEFAULT_CONFIG["deadline"])
+    data["duration_days"] = _duration_days(data.get("duration_days"))
     data["template"] = str(data.get("template") or "{time}")
     data["zero_text"] = str(data.get("zero_text") or "")
+    data["ongoing_text"] = str(data.get("ongoing_text") or "")
     data["past_text"] = str(data.get("past_text") or "")
     data["base_font_size"] = _clamp_int(data.get("base_font_size"), 8, 120, 20)
     data["urgent_font_size"] = _clamp_int(data.get("urgent_font_size"), 8, 200, 34)
