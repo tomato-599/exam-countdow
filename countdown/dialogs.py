@@ -40,9 +40,11 @@ from .config import (
     CONFIG_FILE,
     config_to_json,
     fields_to_html,
+    hash_password,
     load_config,
     parse_events,
     sanitize_config,
+    verify_password,
 )
 from .constants import APP_AUTHOR, APP_DESC, APP_TITLE, APP_VERSION, DEFAULT_CONFIG
 from .render import build_html, days_left, resolve_colors
@@ -320,7 +322,7 @@ class EventRow(QWidget):
         self.template_edit.setPlaceholderText("可选模板，留空用默认模板")
         self.template_edit.setText(str(event.get("template") or ""))
         self.template_edit.setMinimumWidth(110)
-        self.template_edit.setToolTip("支持 {name}、{time}、{date}；留空使用默认模板")
+        self.template_edit.setToolTip("支持 {name}、{time}、{date}、{percent}；留空使用默认模板")
 
         self.remove_btn = QPushButton("删除", self)
         self.remove_btn.setObjectName("eventDelete")
@@ -432,6 +434,191 @@ class EventListWidget(QScrollArea):
         self.changed.emit()
 
 
+# --------------------------------------------------------------------------- #
+# 设置密码
+# --------------------------------------------------------------------------- #
+class PasswordPromptDialog(QDialog):
+    """打开受保护功能前要求输入设置密码。"""
+
+    MAX_ATTEMPTS = 5
+
+    def __init__(self, password_hash: str, parent=None):
+        super().__init__(parent)
+        self._hash = password_hash
+        self._attempts = 0
+        pal = fluent_palette()
+        self.setWindowTitle(f"{APP_TITLE} - 需要密码")
+        self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
+        self.setStyleSheet(fluent_style(pal))
+        self.setMinimumWidth(380)
+
+        title = QLabel("此操作需要密码", self)
+        title.setStyleSheet("font-size:16px; font-weight:600;")
+        hint = QLabel(
+            "设置已启用密码保护，请输入密码后继续。\n"
+            "忘记密码可在 config.json 中删除 password_hash 后重新读取配置。",
+            self,
+        )
+        hint.setObjectName("hint")
+        hint.setWordWrap(True)
+
+        self.password_edit = QLineEdit(self)
+        self.password_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.password_edit.setPlaceholderText("请输入设置密码")
+        self.password_edit.returnPressed.connect(self._try_accept)
+        self.password_edit.textChanged.connect(lambda _t: self.error_label.clear())
+
+        self.error_label = QLabel("", self)
+        self.error_label.setStyleSheet(f"color:{pal['danger']};")
+        self.error_label.setWordWrap(True)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok
+            | QDialogButtonBox.StandardButton.Cancel,
+            self,
+        )
+        buttons.button(QDialogButtonBox.StandardButton.Ok).setText("解锁")
+        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("取消")
+        buttons.accepted.connect(self._try_accept)
+        buttons.rejected.connect(self.reject)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 18, 20, 14)
+        layout.setSpacing(10)
+        layout.addWidget(title)
+        layout.addWidget(hint)
+        layout.addSpacing(4)
+        layout.addWidget(self.password_edit)
+        layout.addWidget(self.error_label)
+        layout.addWidget(buttons)
+
+        self.password_edit.setFocus()
+
+    def _try_accept(self) -> None:
+        if verify_password(self.password_edit.text(), self._hash):
+            self.accept()
+            return
+        self._attempts += 1
+        remaining = self.MAX_ATTEMPTS - self._attempts
+        if remaining <= 0:
+            QMessageBox.warning(
+                self, APP_TITLE, "密码错误次数过多，已关闭解锁窗口。"
+            )
+            self.reject()
+            return
+        self.password_edit.clear()
+        self.error_label.setText(f"密码错误，还可尝试 {remaining} 次。")
+        self.password_edit.setFocus()
+
+
+class PasswordSetupDialog(QDialog):
+    """设置 / 修改 / 关闭设置密码；new_hash 为空字符串表示关闭保护。"""
+
+    def __init__(self, password_hash: str, parent=None):
+        super().__init__(parent)
+        self._hash = password_hash
+        self._has_password = bool(password_hash)
+        self.new_hash = password_hash
+        pal = fluent_palette()
+        self.setWindowTitle(f"{APP_TITLE} - 设置密码")
+        self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
+        self.setStyleSheet(fluent_style(pal))
+        self.setMinimumWidth(420)
+
+        title = QLabel("设置密码", self)
+        title.setStyleSheet("font-size:16px; font-weight:600;")
+        hint_text = (
+            "开启后，打开设置、编辑 JSON、导入配置、修改开机自启都需要密码。"
+            "密码只保存加盐哈希，不保存明文。\n"
+            "新密码留空表示关闭密码保护。"
+        )
+        if self._has_password:
+            hint_text = "先输入当前密码，再设置新密码。\n" + hint_text
+        hint = QLabel(hint_text, self)
+        hint.setObjectName("hint")
+        hint.setWordWrap(True)
+
+        form = QFormLayout()
+        form.setHorizontalSpacing(12)
+        form.setVerticalSpacing(8)
+        self.current_edit = None
+        if self._has_password:
+            self.current_edit = QLineEdit(self)
+            self.current_edit.setEchoMode(QLineEdit.EchoMode.Password)
+            self.current_edit.setPlaceholderText("当前密码")
+            form.addRow("当前密码：", self.current_edit)
+
+        self.new_edit = QLineEdit(self)
+        self.new_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.new_edit.setPlaceholderText("新密码，至少 4 位；留空关闭保护")
+        self.new_edit.setMaxLength(64)
+        form.addRow("新密码：", self.new_edit)
+
+        self.confirm_edit = QLineEdit(self)
+        self.confirm_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.confirm_edit.setPlaceholderText("再次输入新密码")
+        self.confirm_edit.setMaxLength(64)
+        self.confirm_edit.returnPressed.connect(self._try_accept)
+        form.addRow("确认密码：", self.confirm_edit)
+
+        self.error_label = QLabel("", self)
+        self.error_label.setStyleSheet(f"color:{pal['danger']};")
+        self.error_label.setWordWrap(True)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok
+            | QDialogButtonBox.StandardButton.Cancel,
+            self,
+        )
+        buttons.button(QDialogButtonBox.StandardButton.Ok).setText("确定")
+        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("取消")
+        buttons.accepted.connect(self._try_accept)
+        buttons.rejected.connect(self.reject)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 18, 20, 14)
+        layout.setSpacing(10)
+        layout.addWidget(title)
+        layout.addWidget(hint)
+        layout.addLayout(form)
+        layout.addWidget(self.error_label)
+        layout.addWidget(buttons)
+
+        (self.current_edit or self.new_edit).setFocus()
+
+    def _try_accept(self) -> None:
+        if self.current_edit is not None and not verify_password(
+            self.current_edit.text(), self._hash
+        ):
+            self.error_label.setText("当前密码不正确。")
+            self.current_edit.clear()
+            self.current_edit.setFocus()
+            return
+        password = self.new_edit.text()
+        if password != self.confirm_edit.text():
+            self.error_label.setText("两次输入的新密码不一致。")
+            self.confirm_edit.clear()
+            self.confirm_edit.setFocus()
+            return
+        if password and len(password) < 4:
+            self.error_label.setText("新密码至少 4 位。")
+            self.new_edit.setFocus()
+            return
+        self.new_hash = hash_password(password) if password else ""
+        self.accept()
+
+
+def require_settings_password(cfg: dict, parent=None) -> bool:
+    """有密码时需要验证通过；没设密码直接放行。"""
+    stored = str(cfg.get("password_hash") or "").strip()
+    if not stored:
+        return True
+    return (
+        PasswordPromptDialog(stored, parent).exec()
+        == QDialog.DialogCode.Accepted
+    )
+
+
 class SettingsDialog(QDialog):
     def __init__(self, cfg: dict, parent=None):
         super().__init__(parent)
@@ -469,8 +656,9 @@ class SettingsDialog(QDialog):
         form.addRow("显示文字：", self.template_edit)
 
         hint = QLabel(
-            "可用占位符：{time} 或 {days} = 剩余天数，{date} = 截止日期，{name} = 事件名称；\n"
-            "进行中文字还支持 {day} = 第几天，{total} = 总天数。",
+            "可用占位符：{time} 或 {days} = 剩余天数，{date} = 截止日期，{name} = 事件名称，\n"
+            "{percent} = 进度百分比（开考前按学年 9 月 1 日起算，考试中按已考天数）；\n"
+            "进行中文字还支持 {day} = 第几天，{total} = 总天数。例如：已完成 {percent}%。",
             card,
         )
         hint.setObjectName("hint")
@@ -650,6 +838,33 @@ class SettingsDialog(QDialog):
         self.autostart_box.setChecked(bool(cfg.get("autostart", True)))
         form.addRow("", self.autostart_box)
         page_layout.addWidget(card)
+
+        card, form = self._card(page, "设置密码")
+        self._password_hash = str(cfg.get("password_hash") or "")
+        self.password_status = QLabel(card)
+        self.password_status.setObjectName("hint")
+        self.password_status.setWordWrap(True)
+        self.password_btn = QPushButton("设置 / 修改密码…", card)
+        self.password_btn.clicked.connect(self._change_password)
+        password_row = QHBoxLayout()
+        password_row.setContentsMargins(0, 0, 0, 0)
+        password_row.setSpacing(8)
+        password_row.addWidget(self.password_status, 1)
+        password_row.addWidget(self.password_btn)
+        password_holder = QWidget(card)
+        password_holder.setLayout(password_row)
+        form.addRow("密码保护：", password_holder)
+
+        password_hint = QLabel(
+            "启用后，打开设置、编辑 JSON、导入配置和修改开机自启都需要密码；\n"
+            "密码只保存加盐哈希。忘记密码可在 config.json 里删除 password_hash，"
+            "或在 JSON 编辑器里清空该值。",
+            card,
+        )
+        password_hint.setObjectName("hint")
+        password_hint.setWordWrap(True)
+        form.addRow("", password_hint)
+        page_layout.addWidget(card)
         page_layout.addStretch(1)
         tabs.addTab(page, "行为")
 
@@ -691,6 +906,7 @@ class SettingsDialog(QDialog):
 
         self._sync_color_buttons()
         self._update_deadline_enabled()
+        self._update_password_status()
         self.update_preview()
 
     # ---------------- 辅助 ----------------
@@ -742,6 +958,22 @@ class SettingsDialog(QDialog):
                 "duration_days": max(1, self.duration_spin.value()),
             }
         )
+
+    def _change_password(self) -> None:
+        dialog = PasswordSetupDialog(self._password_hash, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self._password_hash = dialog.new_hash
+            self._update_password_status()
+
+    def _update_password_status(self) -> None:
+        if self._password_hash:
+            self.password_status.setText(
+                "已启用：设置、JSON 编辑器、配置导入需要密码"
+            )
+            self.password_btn.setText("修改 / 关闭密码…")
+        else:
+            self.password_status.setText("未启用：任何人都能打开并修改设置")
+            self.password_btn.setText("设置密码…")
 
     def _on_color_mode(self, _index: int) -> None:
         self._sync_color_buttons()
@@ -804,6 +1036,7 @@ class SettingsDialog(QDialog):
         cfg["urgent_color"] = self.urgent_color
         cfg["opacity"] = self.opacity.value() / 100.0
         cfg["autostart"] = self.autostart_box.isChecked()
+        cfg["password_hash"] = self._password_hash
         cfg["school_days"] = self.school_days_box.isChecked()
         cfg["holiday_auto"] = self.holiday_auto_box.isChecked()
         cfg["events"] = self.event_list.to_events()
@@ -842,6 +1075,8 @@ class SettingsDialog(QDialog):
         self.urgent_color = cfg["urgent_color"]
         self.opacity.setValue(int(cfg["opacity"] * 100))
         self.autostart_box.setChecked(cfg["autostart"])
+        self._password_hash = ""
+        self._update_password_status()
         self.school_days_box.setChecked(cfg["school_days"])
         self.holiday_auto_box.setChecked(cfg["holiday_auto"])
         self.keywords_edit.setText(",".join(cfg["hide_keywords"]))
@@ -1011,6 +1246,8 @@ class AboutDialog(QDialog):
         self.json_view.setPlainText(config_to_json(cfg))
 
     def _edit(self) -> None:
+        if not require_settings_password(self.cfg, self):
+            return
         editor = ConfigEditorDialog(self.cfg, self)
         if editor.exec() == QDialog.DialogCode.Accepted and editor.result_cfg:
             if self.on_apply:

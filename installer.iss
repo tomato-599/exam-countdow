@@ -2,10 +2,10 @@
 ; 编译： tools\InnoSetup6\ISCC.exe installer.iss
 
 #define AppName "高考倒计时"
-#define AppVersion "0.7.1"
+#define AppVersion "1.0.0"
 ; VersionInfoVersion 必须是 X.X.X.X 纯数字、安装包文件名不能带空格，改版本时这两处一起改
-#define VersionNum "0.7.1.0"
-#define FileTag "0.7.1"
+#define VersionNum "1.0.0.0"
+#define FileTag "1.0.0"
 #define AppPublisher "李沐泽"
 #define AppExeName "GaokaoCountdown.exe"
 #define RunValueName "GaokaoCountdown"

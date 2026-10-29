@@ -9,7 +9,7 @@ from datetime import date
 
 APP_ID = "GaokaoCountdown"          # 注册表 / 互斥体使用的名字
 APP_TITLE = "高考倒计时"
-APP_VERSION = "0.7.1"
+APP_VERSION = "1.0.0"
 APP_AUTHOR = "L"
 APP_DESC = "置顶悬浮的高考倒计时 · 希沃前台自动隐藏 · 托盘常驻"
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
@@ -51,6 +51,7 @@ DEFAULT_CONFIG = {
     "bg_color": "#FFFFFF",                   # 自定义背景颜色
     "opacity": 0.92,                         # 背景不透明度 0~1
     "autostart": True,                       # 开机自启动
+    "password_hash": "",                     # 设置密码（PBKDF2 哈希，空 = 不启用）
     "margin_x": 28,                          # 距离屏幕右边缘
     "margin_y": 24,                          # 距离屏幕上边缘
     "hide_keywords": DEFAULT_HIDE_KEYWORDS,  # 自动隐藏的关键词
@@ -71,9 +72,9 @@ DEFAULT_CONFIG = {
 CONFIG_FIELDS: dict[str, str] = {
     "deadline": "截止日期时间（即开考时间），ISO 格式 YYYY-MM-DD HH:MM:SS",
     "duration_days": "考试持续天数（含截止当天），1 ~ 365；留空按 1 天",
-    "template": "显示文字模板，{time} 或 {days} = 剩余天数，{date} = 截止日期",
+    "template": "显示文字模板，{time} 或 {days} = 剩余天数，{date} = 截止日期，{percent} = 进度百分比",
     "zero_text": "剩余天数为 0（考试第一天）时显示的文字",
-    "ongoing_text": "多天考试进行中显示的文字，支持 {name}/{day}/{total}/{date}",
+    "ongoing_text": "多天考试进行中显示的文字，支持 {name}/{day}/{total}/{percent}/{date}",
     "past_text": "考试全部结束后显示的文字",
     "base_font_size": "常态文字字号（px）",
     "urgent_font_size": "紧急状态下数字字号（px）",
@@ -85,6 +86,7 @@ CONFIG_FIELDS: dict[str, str] = {
     "bg_color": "自定义模式下的背景颜色",
     "opacity": "背景不透明度，0.15 ~ 1.0",
     "autostart": "是否开机自动启动（true / false）",
+    "password_hash": "设置密码的 PBKDF2 哈希；留空表示不启用密码保护，删除该值即可清除密码",
     "margin_x": "悬浮窗距离屏幕右边距（px）",
     "margin_y": "悬浮窗距离屏幕上边距（px）",
     "hide_keywords": "前台程序命中这些关键词（进程名或窗口标题）时自动隐藏",

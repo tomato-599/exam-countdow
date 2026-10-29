@@ -30,7 +30,12 @@ from .config import (
     save_config,
 )
 from .constants import APP_TITLE, APP_VERSION
-from .dialogs import AboutDialog, ConfigEditorDialog, SettingsDialog
+from .dialogs import (
+    AboutDialog,
+    ConfigEditorDialog,
+    SettingsDialog,
+    require_settings_password,
+)
 from .holidays import HolidayStore
 from .render import count_days, days_left, plain_text
 from .system import (
@@ -295,6 +300,9 @@ class CountdownApp:
             )
 
     def toggle_autostart(self) -> None:
+        if not require_settings_password(self.cfg):
+            self.act_autostart.setChecked(bool(self.cfg.get("autostart")))
+            return
         enabled = self.act_autostart.isChecked()
         ok = set_autostart(enabled)
         if not ok:
@@ -308,11 +316,15 @@ class CountdownApp:
 
     # ---------------- 设置 / 关于 ----------------
     def open_settings(self) -> None:
+        if not require_settings_password(self.cfg):
+            return
         dialog = SettingsDialog(self.cfg)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self.apply_config(dialog.collect())
 
     def open_config_editor(self) -> None:
+        if not require_settings_password(self.cfg):
+            return
         dialog = ConfigEditorDialog(self.cfg)
         if dialog.exec() == QDialog.DialogCode.Accepted and dialog.result_cfg:
             self.apply_config(dialog.result_cfg)
@@ -331,8 +343,10 @@ class CountdownApp:
         if not path:
             return
         try:
+            export_cfg = dict(self.cfg)
+            export_cfg["password_hash"] = ""
             with open(path, "w", encoding="utf-8") as fp:
-                fp.write(config_to_json(self.cfg))
+                fp.write(config_to_json(export_cfg))
         except Exception:
             log_error("导出配置失败:\n" + traceback.format_exc())
             QMessageBox.warning(None, APP_TITLE, "导出配置失败，详情见 error.log。")
@@ -343,6 +357,8 @@ class CountdownApp:
         )
 
     def import_config(self) -> None:
+        if not require_settings_password(self.cfg):
+            return
         path, _ = QFileDialog.getOpenFileName(
             None, "导入配置", "", "JSON 文件 (*.json)"
         )
@@ -355,7 +371,11 @@ class CountdownApp:
             log_error("导入配置失败:\n" + traceback.format_exc())
             QMessageBox.warning(None, APP_TITLE, "导入失败：不是合法的 JSON 文件。")
             return
-        self.apply_config(sanitize_config(raw))
+        imported = sanitize_config(raw)
+        # 导入文件不带密码哈希时保留本机密码，避免别人分享的配置把本机锁死
+        if not imported.get("password_hash"):
+            imported["password_hash"] = self.cfg.get("password_hash", "")
+        self.apply_config(imported)
         self.tray.showMessage(
             APP_TITLE, "配置已导入并立即生效。",
             QSystemTrayIcon.MessageIcon.Information, 3000,

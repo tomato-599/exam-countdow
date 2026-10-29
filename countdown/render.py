@@ -82,6 +82,32 @@ def exam_progress(cfg: dict, item: dict | None = None) -> tuple[int, int] | None
     return None
 
 
+def school_year_start(deadline: date) -> date:
+    """截止日期所在学年的起点：9 月 1 日（9 月及以后算同年，之前算上一年）。"""
+    year = deadline.year if deadline.month >= 9 else deadline.year - 1
+    return date(year, 9, 1)
+
+
+def progress_percent(cfg: dict, item: dict | None = None) -> int:
+    """进度百分比：开考前按学年起点到截止日，多天考试进行中按已考天数，结束后 100。"""
+    raw = (item or {}).get("deadline") or cfg.get("deadline")
+    dt = parse_deadline(raw)
+    if dt is None:
+        return 0
+    today = date.today()
+    total = duration_days(cfg, item)
+    offset = (today - dt.date()).days
+    if offset >= total:
+        return 100
+    if offset > 0:
+        return min(100, round((offset + 1) * 100 / total))
+    start = school_year_start(dt.date())
+    span = (dt.date() - start).days
+    if span <= 0:
+        return 100 if today >= dt.date() else 0
+    return max(0, min(100, round((today - start).days * 100 / span)))
+
+
 def resolve_texts(cfg: dict, item: dict | None) -> tuple[str, str, str, str]:
     """返回 (文字模板, 归零文字, 已过文字, 名称)。"""
     item = item or {}
@@ -115,11 +141,13 @@ def format_ongoing(
     template = str(cfg.get("ongoing_text") or "").strip()
     if not template:
         template = DEFAULT_CONFIG["ongoing_text"]
+    percent = min(100, round(day * 100 / total)) if total else 0
     return (
         template.replace("{name}", name)
         .replace("{date}", date_text)
         .replace("{day}", str(day))
         .replace("{total}", str(total))
+        .replace("{percent}", str(percent))
     )
 
 
@@ -139,12 +167,14 @@ def build_html(cfg: dict, days: int, item: dict | None = None) -> str:
             text = format_ongoing(cfg, item, *progress)
         else:
             text = (zero_text if days == 0 else past_text) or zero_text or ""
+            text = text.replace("{percent}", "100")
         return (
             f'<span style="font-size:{zero_size}px;font-weight:700;'
             f'color:{urgent_color};">{_esc(text)}</span>'
         )
 
     date_text = str((item or {}).get("deadline") or cfg.get("deadline") or "")[:10]
+    percent = str(progress_percent(cfg, item))
 
     placeholder = "{time}" if "{time}" in template else (
         "{days}" if "{days}" in template else None
@@ -154,8 +184,16 @@ def build_html(cfg: dict, days: int, item: dict | None = None) -> str:
     else:  # 模板里没写占位符，就把天数补在后面
         prefix, suffix = template + " ", ""
 
-    prefix = prefix.replace("{date}", date_text).replace("{name}", name)
-    suffix = suffix.replace("{date}", date_text).replace("{name}", name)
+    prefix = (
+        prefix.replace("{date}", date_text)
+        .replace("{name}", name)
+        .replace("{percent}", percent)
+    )
+    suffix = (
+        suffix.replace("{date}", date_text)
+        .replace("{name}", name)
+        .replace("{percent}", percent)
+    )
 
     urgent = days < int(cfg.get("urgent_days", 10))
     if urgent:
@@ -180,12 +218,13 @@ def plain_text(cfg: dict, days: int, item: dict | None = None) -> str:
         progress = exam_progress(cfg, item)
         if progress:
             return format_ongoing(cfg, item, *progress)
-        return zero_text if days == 0 else past_text
+        text = zero_text if days == 0 else past_text
+        return text.replace("{percent}", "100")
     date_text = str((item or {}).get("deadline") or cfg.get("deadline") or "")[:10]
     text = template or "{time}"
     text = text.replace("{time}", str(days)).replace("{days}", str(days))
     text = text.replace("{date}", date_text).replace("{name}", name)
-    return text
+    return text.replace("{percent}", str(progress_percent(cfg, item)))
 
 
 def apply_card_style(frame: QFrame, cfg: dict) -> str:

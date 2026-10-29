@@ -3,8 +3,8 @@
 
 只提示有新版本，不下载、不安装。文件内容支持两种写法：
 
-1. 单行纯文本：``0.7.1``
-2. JSON：``{"version": "0.7.1"}``
+1. 单行纯文本：``1.0.0``
+2. JSON：``{"version": "1.0.0"}``
 
 版本号采用 ``主版本号.次版本号.修订版本号``。
 """
@@ -20,7 +20,7 @@ VERSION_FILE = "version.json"
 
 
 def parse_version(text: str) -> tuple[int, int, int]:
-    """把 'v0.7.1' / '0.7.1' 解析成 (0, 7, 1)；缺位补 0，非数字段按 0 处理。"""
+    """把 'v1.0.0' / '1.0.0' 解析成 (1, 0, 0)；缺位补 0，非数字段按 0 处理。"""
     parts: list[int] = []
     for token in str(text).strip().lstrip("vV").split("."):
         digits = "".join(ch for ch in token if ch.isdigit())

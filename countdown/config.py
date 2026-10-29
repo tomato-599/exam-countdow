@@ -4,8 +4,11 @@
 from __future__ import annotations
 
 import html
+import hashlib
+import hmac
 import json
 import os
+import secrets
 import sys
 import traceback
 from datetime import datetime
@@ -118,6 +121,56 @@ def config_items(cfg: dict) -> list[dict]:
 
 
 # --------------------------------------------------------------------------- #
+# 设置密码
+# --------------------------------------------------------------------------- #
+PASSWORD_ITERATIONS = 120_000
+
+
+def hash_password(password: str) -> str:
+    """PBKDF2-SHA256 加盐哈希；config.json 里不保存明文。"""
+    salt = secrets.token_bytes(16)
+    digest = hashlib.pbkdf2_hmac(
+        "sha256", password.encode("utf-8"), salt, PASSWORD_ITERATIONS
+    )
+    return f"pbkdf2_sha256${PASSWORD_ITERATIONS}${salt.hex()}${digest.hex()}"
+
+
+def verify_password(password: str, stored: str) -> bool:
+    try:
+        algo, iterations, salt_hex, digest_hex = str(stored).split("$")
+        if algo != "pbkdf2_sha256":
+            return False
+        digest = hashlib.pbkdf2_hmac(
+            "sha256",
+            password.encode("utf-8"),
+            bytes.fromhex(salt_hex),
+            int(iterations),
+        )
+        return hmac.compare_digest(digest.hex(), digest_hex)
+    except Exception:
+        return False
+
+
+def _password_hash_or_empty(value) -> str:
+    """只接受格式合法的哈希，损坏的内容视为未设置，避免永远无法解锁。"""
+    text = str(value or "").strip()
+    parts = text.split("$")
+    if len(parts) != 4 or parts[0] != "pbkdf2_sha256":
+        return ""
+    try:
+        int(parts[1])
+        bytes.fromhex(parts[2])
+        bytes.fromhex(parts[3])
+    except Exception:
+        return ""
+    return text
+
+
+def password_enabled(cfg: dict) -> bool:
+    return bool(str(cfg.get("password_hash") or "").strip())
+
+
+# --------------------------------------------------------------------------- #
 # 数据清洗
 # --------------------------------------------------------------------------- #
 def _clamp_int(value, low: int, high: int, default: int) -> int:
@@ -164,6 +217,7 @@ def sanitize_config(raw) -> dict:
     data["bg_color"] = _color_or(data.get("bg_color"), "#FFFFFF")
     data["urgent_color"] = _color_or(data.get("urgent_color"), "#E53935")
     data["autostart"] = bool(data.get("autostart"))
+    data["password_hash"] = _password_hash_or_empty(data.get("password_hash"))
     data["school_days"] = bool(data.get("school_days"))
     keywords = data.get("hide_keywords")
     if isinstance(keywords, str):
