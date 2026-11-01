@@ -11,7 +11,7 @@ import os
 import secrets
 import sys
 import traceback
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 from PyQt6.QtGui import QColor
@@ -83,8 +83,17 @@ def _duration_days(value) -> int:
         return 1
 
 
+def _date_or_empty(value) -> str:
+    """只保留合法的 YYYY-MM-DD；空或非法值返回空字符串。"""
+    text = str(value or "").strip()[:10]
+    try:
+        return date.fromisoformat(text).isoformat()
+    except Exception:
+        return ""
+
+
 def parse_events(raw) -> list[dict]:
-    """规范化多倒计时列表：每项 {name, deadline, template, duration_days}。"""
+    """规范化多倒计时列表：每项 {name, deadline, template, duration_days, progress_start}。"""
     events: list[dict] = []
     if not isinstance(raw, list):
         return events
@@ -100,6 +109,7 @@ def parse_events(raw) -> list[dict]:
                 "deadline": deadline,
                 "template": str(entry.get("template") or "").strip(),
                 "duration_days": _duration_days(entry.get("duration_days")),
+                "progress_start": _date_or_empty(entry.get("progress_start")),
             }
         )
     return events
@@ -116,6 +126,7 @@ def config_items(cfg: dict) -> list[dict]:
             "deadline": str(cfg.get("deadline") or ""),
             "template": "",
             "duration_days": _duration_days(cfg.get("duration_days")),
+            "progress_start": "",
         }
     ]
 
@@ -201,6 +212,13 @@ def sanitize_config(raw) -> dict:
         )
     data["deadline"] = str(data.get("deadline") or DEFAULT_CONFIG["deadline"])
     data["duration_days"] = _duration_days(data.get("duration_days"))
+    data["progress_start_mode"] = (
+        "custom" if data.get("progress_start_mode") == "custom" else "school_year"
+    )
+    data["progress_start"] = _date_or_empty(data.get("progress_start"))
+    if data["progress_start_mode"] == "custom" and not data["progress_start"]:
+        # 选了自定义却没写日期时按当天起算，避免界面与实际计算不一致
+        data["progress_start"] = date.today().isoformat()
     data["template"] = str(data.get("template") or "{time}")
     data["zero_text"] = str(data.get("zero_text") or "")
     data["ongoing_text"] = str(data.get("ongoing_text") or "")

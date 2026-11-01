@@ -88,8 +88,29 @@ def school_year_start(deadline: date) -> date:
     return date(year, 9, 1)
 
 
+def parse_date(raw) -> date | None:
+    """解析 YYYY-MM-DD（也接受带时间的字符串，只取日期部分）。"""
+    text = str(raw or "").strip()[:10]
+    if not text:
+        return None
+    try:
+        return date.fromisoformat(text)
+    except Exception:
+        return None
+
+
+def resolve_progress_start(cfg: dict, item: dict | None = None) -> date | None:
+    """进度起算日：条目自定义优先，其次全局自定义；都没有则返回 None（按学年 9 月 1 日）。"""
+    custom = parse_date((item or {}).get("progress_start"))
+    if custom:
+        return custom
+    if cfg.get("progress_start_mode") == "custom":
+        return parse_date(cfg.get("progress_start"))
+    return None
+
+
 def progress_percent(cfg: dict, item: dict | None = None) -> int:
-    """进度百分比：开考前按学年起点到截止日，多天考试进行中按已考天数，结束后 100。"""
+    """进度百分比：开考前按起算日到截止日，多天考试进行中按已考天数，结束后 100。"""
     raw = (item or {}).get("deadline") or cfg.get("deadline")
     dt = parse_deadline(raw)
     if dt is None:
@@ -101,7 +122,7 @@ def progress_percent(cfg: dict, item: dict | None = None) -> int:
         return 100
     if offset > 0:
         return min(100, round((offset + 1) * 100 / total))
-    start = school_year_start(dt.date())
+    start = resolve_progress_start(cfg, item) or school_year_start(dt.date())
     span = (dt.date() - start).days
     if span <= 0:
         return 100 if today >= dt.date() else 0

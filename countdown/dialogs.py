@@ -285,7 +285,7 @@ def _to_qdatetime(raw) -> QDateTime:
 
 
 class EventRow(QWidget):
-    """动态列表中的一行：名称、截止时间、持续天数、可选模板、删除。"""
+    """动态列表中的一行：名称、截止时间、持续天数、模板、可选起算日、删除。"""
 
     changed = pyqtSignal()
     remove_requested = pyqtSignal(object)
@@ -293,8 +293,12 @@ class EventRow(QWidget):
     def __init__(self, event: dict | None, parent=None):
         super().__init__(parent)
         event = event or {}
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(2, 2, 2, 2)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(2, 2, 2, 2)
+        outer.setSpacing(6)
+
+        layout = QHBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(6)
 
         self.name_edit = QLineEdit(self)
@@ -318,12 +322,6 @@ class EventRow(QWidget):
         self.duration_spin.setFixedWidth(104)
         self.duration_spin.setToolTip("考试持续天数（含截止当天）；留空按 1 天")
 
-        self.template_edit = QLineEdit(self)
-        self.template_edit.setPlaceholderText("可选模板，留空用默认模板")
-        self.template_edit.setText(str(event.get("template") or ""))
-        self.template_edit.setMinimumWidth(110)
-        self.template_edit.setToolTip("支持 {name}、{time}、{date}、{percent}；留空使用默认模板")
-
         self.remove_btn = QPushButton("删除", self)
         self.remove_btn.setObjectName("eventDelete")
         self.remove_btn.setFixedWidth(48)
@@ -333,13 +331,50 @@ class EventRow(QWidget):
         layout.addWidget(self.name_edit, 2)
         layout.addWidget(self.deadline_edit)
         layout.addWidget(self.duration_spin)
-        layout.addWidget(self.template_edit, 3)
         layout.addWidget(self.remove_btn)
+
+        second = QHBoxLayout()
+        second.setContentsMargins(0, 0, 0, 0)
+        second.setSpacing(6)
+
+        self.template_edit = QLineEdit(self)
+        self.template_edit.setPlaceholderText("可选模板，留空用默认模板")
+        self.template_edit.setText(str(event.get("template") or ""))
+        self.template_edit.setMinimumWidth(110)
+        self.template_edit.setToolTip("支持 {name}、{time}、{date}、{percent}；留空使用默认模板")
+
+        raw_start = str(event.get("progress_start") or "")
+        self.start_check = QCheckBox("自定义起算日", self)
+        self.start_check.setChecked(bool(raw_start))
+        self.start_check.setToolTip(
+            "勾选后这条倒计时的进度百分比从指定日期算起；不勾选跟随设置里的默认起算日"
+        )
+
+        self.start_edit = QDateTimeEdit(self)
+        self.start_edit.setCalendarPopup(True)
+        self.start_edit.setDisplayFormat("yyyy-MM-dd")
+        self.start_edit.setDateTime(_to_qdatetime(raw_start or date.today().isoformat()))
+        self.start_edit.setFixedWidth(130)
+        self.start_edit.setEnabled(bool(raw_start))
+        self.start_edit.setToolTip("进度百分比的起算日期（只影响 {percent}）")
+
+        second.addWidget(self.template_edit, 1)
+        second.addWidget(self.start_check)
+        second.addWidget(self.start_edit)
+
+        outer.addLayout(layout)
+        outer.addLayout(second)
 
         self.name_edit.textChanged.connect(lambda _text: self.changed.emit())
         self.template_edit.textChanged.connect(lambda _text: self.changed.emit())
         self.deadline_edit.dateTimeChanged.connect(lambda _dt: self.changed.emit())
         self.duration_spin.valueChanged.connect(lambda _value: self.changed.emit())
+        self.start_check.toggled.connect(self._on_start_toggled)
+        self.start_edit.dateChanged.connect(lambda _d: self.changed.emit())
+
+    def _on_start_toggled(self, checked: bool) -> None:
+        self.start_edit.setEnabled(checked)
+        self.changed.emit()
 
     def is_blank(self) -> bool:
         return not self.name_edit.text().strip() and not self.template_edit.text().strip()
@@ -352,6 +387,11 @@ class EventRow(QWidget):
             "deadline": self.deadline_edit.dateTime().toString("yyyy-MM-dd HH:mm:ss"),
             "template": self.template_edit.text().strip(),
             "duration_days": max(1, self.duration_spin.value()),
+            "progress_start": (
+                self.start_edit.date().toString("yyyy-MM-dd")
+                if self.start_check.isChecked()
+                else ""
+            ),
         }
 
 
@@ -647,6 +687,40 @@ class SettingsDialog(QDialog):
         self.duration_spin.setValue(int(cfg.get("duration_days", 1)))
         self.duration_spin.setToolTip("考试持续天数（含截止当天）；留空按 1 天")
         form.addRow("考试持续天数：", self.duration_spin)
+
+        self.start_mode = QComboBox(card)
+        self.start_mode.addItem("学年 9 月 1 日（默认）", "school_year")
+        self.start_mode.addItem("自定义日期", "custom")
+        mode_index = self.start_mode.findData(
+            cfg.get("progress_start_mode", "school_year")
+        )
+        self.start_mode.setCurrentIndex(max(0, mode_index))
+
+        self.start_date_edit = QDateTimeEdit(card)
+        self.start_date_edit.setCalendarPopup(True)
+        self.start_date_edit.setDisplayFormat("yyyy-MM-dd")
+        self.start_date_edit.setDateTime(
+            _to_qdatetime(cfg.get("progress_start") or date.today().isoformat())
+        )
+        self.start_date_edit.setFixedWidth(130)
+        self.start_date_edit.setToolTip("进度百分比的起算日期（只影响 {percent}）")
+        start_row = QHBoxLayout()
+        start_row.setContentsMargins(0, 0, 0, 0)
+        start_row.setSpacing(8)
+        start_row.addWidget(self.start_mode, 1)
+        start_row.addWidget(self.start_date_edit)
+        start_holder = QWidget(card)
+        start_holder.setLayout(start_row)
+        form.addRow("进度起算日：", start_holder)
+
+        start_hint = QLabel(
+            "{percent} 按「起算日 → 截止日期」计算已过比例；选学年 9 月 1 日时按截止日期"
+            "所在学年自动推算，选自定义日期则固定从该日算起。",
+            card,
+        )
+        start_hint.setObjectName("hint")
+        start_hint.setWordWrap(True)
+        form.addRow("", start_hint)
         page_layout.addWidget(card)
 
         card, form = self._card(page, "显示文字")
@@ -657,7 +731,7 @@ class SettingsDialog(QDialog):
 
         hint = QLabel(
             "可用占位符：{time} 或 {days} = 剩余天数，{date} = 截止日期，{name} = 事件名称，\n"
-            "{percent} = 进度百分比（开考前按学年 9 月 1 日起算，考试中按已考天数）；\n"
+            "{percent} = 进度百分比（开考前按上方「进度起算日」计算，考试中按已考天数）；\n"
             "进行中文字还支持 {day} = 第几天，{total} = 总天数。例如：已完成 {percent}%。",
             card,
         )
@@ -707,7 +781,8 @@ class SettingsDialog(QDialog):
 
         events_hint = QLabel(
             "每行一条，顺序即轮播顺序；名称和模板都为空的行会被忽略。\n"
-            "每条可单独设置持续天数（留空 = 1 天，当天结束）；进行中文字在“倒计时”页统一设置。\n"
+            "每条可单独设置持续天数（留空 = 1 天，当天结束）；勾选「自定义起算日」可单独指定"
+            "进度百分比的起点，不勾选则跟随“倒计时”页的起算日设置。\n"
             "条目模板留空时使用上方「默认模板」；配置列表后，“倒计时”页的截止日期和持续天数不再生效。",
             card,
         )
@@ -891,6 +966,8 @@ class SettingsDialog(QDialog):
         # 联动
         self.deadline_edit.dateTimeChanged.connect(self.update_preview)
         self.duration_spin.valueChanged.connect(self.update_preview)
+        self.start_mode.currentIndexChanged.connect(self._on_start_mode)
+        self.start_date_edit.dateChanged.connect(lambda _d: self.update_preview())
         self.template_edit.textChanged.connect(self.update_preview)
         self.zero_edit.textChanged.connect(self.update_preview)
         self.ongoing_edit.textChanged.connect(self.update_preview)
@@ -906,6 +983,7 @@ class SettingsDialog(QDialog):
 
         self._sync_color_buttons()
         self._update_deadline_enabled()
+        self._update_start_enabled()
         self._update_password_status()
         self.update_preview()
 
@@ -946,6 +1024,20 @@ class SettingsDialog(QDialog):
         self.deadline_edit.setToolTip(tip)
         self.duration_spin.setToolTip(
             tip or "考试持续天数（含截止当天）；留空按 1 天"
+        )
+
+    def _on_start_mode(self, _index: int) -> None:
+        self._update_start_enabled()
+        self.update_preview()
+
+    def _update_start_enabled(self) -> None:
+        """只有自定义起算方式才允许改日期。"""
+        custom = self.start_mode.currentData() == "custom"
+        self.start_date_edit.setEnabled(custom)
+        self.start_date_edit.setToolTip(
+            "进度百分比的起算日期"
+            if custom
+            else "当前按学年 9 月 1 日计算；切换到自定义日期后可修改"
         )
 
     def _add_event(self) -> None:
@@ -1022,6 +1114,8 @@ class SettingsDialog(QDialog):
         cfg = dict(self.cfg)
         cfg["deadline"] = self.deadline_edit.dateTime().toString("yyyy-MM-dd HH:mm:ss")
         cfg["duration_days"] = max(1, self.duration_spin.value())
+        cfg["progress_start_mode"] = self.start_mode.currentData()
+        cfg["progress_start"] = self.start_date_edit.date().toString("yyyy-MM-dd")
         cfg["template"] = self.template_edit.text()
         cfg["zero_text"] = self.zero_edit.text()
         cfg["ongoing_text"] = self.ongoing_edit.text()
@@ -1061,6 +1155,13 @@ class SettingsDialog(QDialog):
         cfg = dict(DEFAULT_CONFIG)
         self.deadline_edit.setDateTime(_to_qdatetime(cfg["deadline"]))
         self.duration_spin.setValue(cfg["duration_days"])
+        self.start_mode.setCurrentIndex(
+            max(0, self.start_mode.findData(cfg["progress_start_mode"]))
+        )
+        self.start_date_edit.setDateTime(_to_qdatetime(date.today().isoformat()))
+        self.start_date_edit.setEnabled(
+            self.start_mode.currentData() == "custom"
+        )
         self.template_edit.setText(cfg["template"])
         self.zero_edit.setText(cfg["zero_text"])
         self.ongoing_edit.setText(cfg["ongoing_text"])
