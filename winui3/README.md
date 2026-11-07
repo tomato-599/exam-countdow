@@ -48,7 +48,7 @@ winui3/
 
 ## 构建与运行
 
-需要 .NET 8 SDK（本机测试使用便携版 `%USERPROFILE%\.dotnet8\dotnet.exe`）。
+需要 .NET 8 SDK；可用 dotnet-install 把便携版装到非系统盘（本机在 `D:\Tools\dotnet8\dotnet.exe`），再用其中的 `dotnet.exe` 构建。
 
 ```bat
 cd winui3
@@ -95,3 +95,5 @@ dotnet run -c Release
 ## 打包提示
 
 自包含输出目录约 400 个文件，可直接用 Inno Setup 等工具整体打包；应用不需要管理员权限，也没有 MSIX 安装流程。
+
+安装包默认装到用户目录（`%LOCALAPPDATA%\Programs\高考倒计时`，约 300 MB）。C 盘空间紧张时，在安装向导的目录页改到 D 盘即可。
