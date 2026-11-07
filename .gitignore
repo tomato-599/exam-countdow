@@ -21,3 +21,11 @@ output/
 # 本地备份 / 测试产物
 _acrylic_backup/
 _test_config/
+
+# WinUI 3 构建产物
+winui3/bin/
+winui3/obj/
+winui3/.smoke/
+winui3/publish/
+winui3/tests/**/bin/
+winui3/tests/**/obj/
