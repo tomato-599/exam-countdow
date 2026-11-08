@@ -12,5 +12,6 @@
     <Compile Include="..\..\AppConfig.cs" Link="AppConfig.cs" />
     <Compile Include="..\..\Render.cs" Link="Render.cs" />
     <Compile Include="..\..\HolidayData.cs" Link="HolidayData.cs" />
+    <Compile Include="..\..\UpdateService.cs" Link="UpdateService.cs" />
   </ItemGroup>
 </Project>

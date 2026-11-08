@@ -43,6 +43,13 @@ Console.WriteLine($"hash={hash[..24]}... verifyTrue={AppConfig.VerifyPassword("1
                   $"verifyFalse={AppConfig.VerifyPassword("1235", hash)}");
 
 var json = """{"progress_start_mode":"custom","opacity":5,"events":[{"name":"A","deadline":"2027-01-01","duration_days":"3"}]}""";
+var updateJson = """{"version":"3.0.3","download_url":"https://github.com/tomato-599/exam-countdow/releases/download/v3.0.3/exam-countdow-Setup-3.0.3.exe"}""";
+Console.WriteLine("update version=" + UpdateService.ExtractVersion(updateJson) +
+                  " url=" + UpdateService.ExtractDownloadUrl(updateJson) +
+                  " newer=" + UpdateService.IsNewer("3.0.3", "3.0.2"));
+Console.WriteLine("plain version=" + UpdateService.ExtractVersion("3.0.2") +
+                  " url=[" + UpdateService.ExtractDownloadUrl("3.0.2") + "]");
+
 var normalized = AppConfig.FromJson(json);
 Console.WriteLine($"normalized mode={normalized.ProgressStartMode} start={normalized.ProgressStart} " +
                   $"opacity={normalized.Opacity} events={normalized.Events.Count} dur={normalized.Events[0].DurationDays}");

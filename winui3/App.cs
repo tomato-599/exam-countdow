@@ -17,6 +17,8 @@ public sealed partial class App : Application
     private bool _updateBusy;
     private bool _updateManual;
     private string _notifiedVersion = "";
+    private UpdateInfo? _lastUpdate;
+    private UpdateWindow? _updateWindow;
 
     private const int CmdToggle = 1;
     private const int CmdRefresh = 2;
@@ -101,6 +103,8 @@ public sealed partial class App : Application
     // ------------------------------------------------------------------ 托盘
     private List<TrayMenuEntry> BuildTrayMenu()
     {
+        var hasUpdate = _lastUpdate != null &&
+                        UpdateService.IsNewer(_lastUpdate.Version);
         return new List<TrayMenuEntry>
         {
             TrayMenuEntry.Item(
@@ -116,7 +120,9 @@ public sealed partial class App : Application
             TrayMenuEntry.Item($"节假日数据：{_holidayStore.StatusText()}",
                 0, enabled: false),
             TrayMenuEntry.Item("立即更新节假日数据", CmdHolidayUpdate),
-            TrayMenuEntry.Item("检查新版本", CmdCheckUpdate),
+            TrayMenuEntry.Item(
+                hasUpdate ? $"下载新版本 {_lastUpdate!.Version}" : "检查新版本",
+                CmdCheckUpdate),
             TrayMenuEntry.Item("开机自动启动", CmdAutostart, check: _cfg.Autostart),
             TrayMenuEntry.Line(),
             TrayMenuEntry.Item("关于", CmdAbout),
@@ -160,7 +166,11 @@ public sealed partial class App : Application
                 MaybeRefreshHolidays(force: true, notify: true);
                 break;
             case CmdCheckUpdate:
-                CheckUpdates(manual: true);
+                if (_lastUpdate != null &&
+                    UpdateService.IsNewer(_lastUpdate.Version))
+                    ShowUpdateWindow();
+                else
+                    CheckUpdates(manual: true);
                 break;
             case CmdAutostart:
                 await ToggleAutostartAsync();
@@ -350,17 +360,17 @@ public sealed partial class App : Application
         {
             try
             {
-                var latest = await UpdateService.FetchLatestAsync(cfg);
-                _dispatcher.TryEnqueue(() => OnUpdateChecked(true, latest, ""));
+                var info = await UpdateService.FetchLatestAsync(cfg);
+                _dispatcher.TryEnqueue(() => OnUpdateChecked(true, info, ""));
             }
             catch (Exception ex)
             {
-                _dispatcher.TryEnqueue(() => OnUpdateChecked(false, "", ex.Message));
+                _dispatcher.TryEnqueue(() => OnUpdateChecked(false, null, ex.Message));
             }
         });
     }
 
-    private void OnUpdateChecked(bool ok, string latest, string error)
+    private void OnUpdateChecked(bool ok, UpdateInfo? info, string error)
     {
         var manual = _updateManual;
         _updateManual = false;
@@ -374,19 +384,39 @@ public sealed partial class App : Application
             return;
         }
 
-        if (UpdateService.IsNewer(latest))
+        if (info != null && UpdateService.IsNewer(info.Version))
         {
-            if (manual || latest != _notifiedVersion)
+            _lastUpdate = info;
+            if (manual)
             {
-                _notifiedVersion = latest;
-                _tray?.ShowBalloon(AppInfo.Title,
-                    $"发现新版本 {latest}（当前 {AppInfo.Version}），请前往 GitHub 仓库下载新版安装包。");
+                ShowUpdateWindow();
             }
+            else if (info.Version != _notifiedVersion)
+            {
+                _notifiedVersion = info.Version;
+                _tray?.ShowBalloon(AppInfo.Title,
+                    $"发现新版本 {info.Version}（当前 {AppInfo.Version}），" +
+                    "可在托盘菜单选择「下载新版本」安装。");
+            }
+            return;
         }
-        else if (manual)
-        {
+
+        _lastUpdate = null;
+        if (manual)
             _tray?.ShowBalloon(AppInfo.Title, $"当前已是最新版本（{AppInfo.Version}）。");
+    }
+
+    private void ShowUpdateWindow()
+    {
+        if (_lastUpdate == null) return;
+        if (_updateWindow != null)
+        {
+            _updateWindow.Activate();
+            return;
         }
+        _updateWindow = new UpdateWindow(_lastUpdate, Quit);
+        _updateWindow.Closed += (_, _) => _updateWindow = null;
+        _updateWindow.ShowWindow();
     }
 
     // ------------------------------------------------------------------ 退出

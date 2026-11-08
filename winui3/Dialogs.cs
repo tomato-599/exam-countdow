@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using System.Text.Json.Nodes;
@@ -443,82 +444,156 @@ public static class FilePickers
     }
 }
 
-public static class UpdateService
+public sealed class UpdateWindow : Window
 {
-    public static (int Major, int Minor, int Patch) ParseVersion(string text)
+    private readonly UpdateInfo _info;
+    private readonly Action _quit;
+    private readonly TextBlock _status;
+    private readonly ProgressBar _progress;
+    private readonly Button _install;
+    private readonly Button _release;
+    private readonly HttpClient _http = new() { Timeout = TimeSpan.FromMinutes(10) };
+    private bool _downloading;
+
+    public UpdateWindow(UpdateInfo info, Action quit)
     {
-        var parts = new List<int>();
-        foreach (var token in (text ?? "").Trim().TrimStart('v', 'V').Split('.'))
+        _info = info;
+        _quit = quit;
+        Title = $"{AppInfo.Title} - 发现新版本";
+        Ui.SetWindowIcon(this);
+        Ui.MakeTopMost(this);
+
+        var stack = Ui.Stack(12);
+        stack.Children.Add(Ui.Text($"发现新版本 {info.Version}", 22, true));
+        stack.Children.Add(Ui.Text($"当前版本 {AppInfo.Version}", 13));
+        stack.Children.Add(Ui.Hint(
+            "更新包从 GitHub Releases 下载到临时目录，下载完成后会自动启动安装程序。"));
+
+        if (!string.IsNullOrWhiteSpace(info.DownloadUrl))
         {
-            var digits = new string(token.Where(char.IsDigit).ToArray());
-            parts.Add(digits.Length > 0 ? int.Parse(digits, CultureInfo.InvariantCulture) : 0);
-            if (parts.Count == 3) break;
+            var link = Ui.Text(info.DownloadUrl, 11, false, "#1565C0");
+            link.IsTextSelectionEnabled = true;
+            stack.Children.Add(link);
         }
-        while (parts.Count < 3) parts.Add(0);
-        return (parts[0], parts[1], parts[2]);
+        else
+        {
+            stack.Children.Add(Ui.Hint("version.json 未提供 download_url，请打开发布页手动下载。"));
+        }
+
+        _progress = new ProgressBar
+        {
+            Minimum = 0,
+            Maximum = 100,
+            Height = 4,
+            Visibility = Visibility.Collapsed,
+        };
+        _status = Ui.Hint("");
+        stack.Children.Add(_progress);
+        stack.Children.Add(_status);
+
+        var buttons = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 8,
+            HorizontalAlignment = HorizontalAlignment.Right,
+        };
+        var later = new Button { Content = "稍后" };
+        later.Click += (_, _) => Close();
+        _release = new Button { Content = "打开发布页" };
+        _release.Click += (_, _) => OpenReleasePage();
+        _install = new Button
+        {
+            Content = "下载并安装",
+            Style = PasswordPromptWindow.TryAccentStyle(),
+        };
+        _install.Click += async (_, _) => await DownloadAndInstallAsync();
+        if (string.IsNullOrWhiteSpace(info.DownloadUrl)) _install.IsEnabled = false;
+        buttons.Children.Add(_release);
+        buttons.Children.Add(later);
+        buttons.Children.Add(_install);
+        stack.Children.Add(buttons);
+
+        Content = new Border { Padding = new Thickness(24), Child = stack };
+        Ui.CenterWindow(this, 580, 380);
+        Closed += (_, _) => _http.Dispose();
     }
 
-    public static bool IsNewer(string latest, string current = AppInfo.Version)
-        => ParseVersion(latest).CompareTo(ParseVersion(current)) > 0;
+    public void ShowWindow() => Activate();
 
-    public static string ExtractVersion(string text)
+    private void OpenReleasePage()
     {
-        var raw = text.TrimStart('\uFEFF').Trim();
-        if (raw.Length == 0) throw new FormatException("version.json 为空");
+        var url = _info.DownloadUrl;
+        if (string.IsNullOrWhiteSpace(url))
+            url = "https://github.com/tomato-599/exam-countdow/releases";
         try
         {
-            var node = JsonNode.Parse(raw);
-            if (node is JsonObject obj)
-            {
-                foreach (var key in new[] { "version", "latest", "tag_name", "tag" })
-                {
-                    var candidate = obj[key]?.ToString();
-                    if (!string.IsNullOrWhiteSpace(candidate))
-                        return candidate.Trim().TrimStart('v', 'V');
-                }
-                throw new FormatException("version.json 缺少 version 字段");
-            }
-            if (node is JsonValue valueNode && valueNode.TryGetValue<string>(out var value))
-                return value.Trim().TrimStart('v', 'V');
+            Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
         }
-        catch (System.Text.Json.JsonException)
+        catch (Exception ex)
         {
-            // 纯文本格式
+            ConfigStore.LogError("打开发布页失败:\n" + ex);
         }
-        return raw.Split('\n')[0].Trim().Trim('"', '\'', ',', '，').TrimStart('v', 'V');
     }
 
-    public static async Task<string> FetchLatestAsync(AppConfig cfg)
+    private async Task DownloadAndInstallAsync()
     {
-        var repo = string.IsNullOrWhiteSpace(cfg.HolidayRepo)
-            ? "tomato-599/holidays_count" : cfg.HolidayRepo.Trim().Trim('/');
-        var branch = string.IsNullOrWhiteSpace(cfg.HolidayBranch) ? "main" : cfg.HolidayBranch;
-        var urls = new[]
-        {
-            $"https://raw.githubusercontent.com/{repo}/{branch}/version.json",
-            $"https://fastly.jsdelivr.net/gh/{repo}@{branch}/version.json",
-            $"https://cdn.jsdelivr.net/gh/{repo}@{branch}/version.json",
-            $"https://testingcf.jsdelivr.net/gh/{repo}@{branch}/version.json",
-            $"https://gcore.jsdelivr.net/gh/{repo}@{branch}/version.json",
-        };
+        if (_downloading || string.IsNullOrWhiteSpace(_info.DownloadUrl)) return;
+        _downloading = true;
+        _install.IsEnabled = false;
+        _release.IsEnabled = false;
+        _progress.Visibility = Visibility.Visible;
+        _progress.IsIndeterminate = true;
+        _progress.Value = 0;
+        _status.Text = "正在连接 GitHub…";
 
-        var lastError = "";
-        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-        client.DefaultRequestHeaders.TryAddWithoutValidation(
-            "User-Agent", $"GaokaoCountdown/{AppInfo.Version}");
-        foreach (var url in urls)
+        try
         {
-            try
+            using var response = await _http.GetAsync(_info.DownloadUrl,
+                HttpCompletionOption.ResponseHeadersRead);
+            response.EnsureSuccessStatusCode();
+            var total = response.Content.Headers.ContentLength ?? -1;
+            var path = Path.Combine(Path.GetTempPath(),
+                $"ExamCountdown-Setup-{_info.Version}.exe");
+            await using (var input = await response.Content.ReadAsStreamAsync())
+            await using (var output = File.Create(path))
             {
-                var text = await client.GetStringAsync(url).ConfigureAwait(false);
-                return ExtractVersion(text);
+                var buffer = new byte[81920];
+                long received = 0;
+                int read;
+                while ((read = await input.ReadAsync(buffer)) > 0)
+                {
+                    await output.WriteAsync(buffer.AsMemory(0, read));
+                    received += read;
+                    if (total > 0)
+                    {
+                        _progress.IsIndeterminate = false;
+                        _progress.Value = received * 100.0 / total;
+                        _status.Text =
+                            $"已下载 {received / 1048576.0:F1} / {total / 1048576.0:F1} MB";
+                    }
+                    else
+                    {
+                        _status.Text = $"已下载 {received / 1048576.0:F1} MB";
+                    }
+                }
             }
-            catch (Exception ex)
-            {
-                lastError = $"{ex.GetType().Name}: {ex.Message}";
-            }
+
+            _progress.IsIndeterminate = false;
+            _progress.Value = 100;
+            _status.Text = "下载完成，正在启动安装程序…";
+            await Task.Delay(600);
+            Process.Start(new ProcessStartInfo { FileName = path, UseShellExecute = true });
+            Close();
+            _quit();
         }
-        throw new InvalidOperationException(lastError.Length > 0
-            ? lastError : "没有可用的下载地址");
+        catch (Exception ex)
+        {
+            ConfigStore.LogError("下载更新失败:\n" + ex);
+            _status.Text = "下载失败：" + ex.Message;
+            _progress.Visibility = Visibility.Collapsed;
+            _install.IsEnabled = true;
+            _release.IsEnabled = true;
+            _downloading = false;
+        }
     }
 }
