@@ -88,24 +88,39 @@ public static class UpdateService
         var repo = string.IsNullOrWhiteSpace(cfg.HolidayRepo)
             ? "tomato-599/holidays_count" : cfg.HolidayRepo.Trim().Trim('/');
         var branch = string.IsNullOrWhiteSpace(cfg.HolidayBranch) ? "main" : cfg.HolidayBranch;
-        var urls = new[]
+        // API 直取排在前面：jsDelivr 的分支缓存可能几小时内仍是旧文件
+        var urls = new (string Url, bool GitHubApi)[]
         {
-            $"https://raw.githubusercontent.com/{repo}/{branch}/version.json",
-            $"https://fastly.jsdelivr.net/gh/{repo}@{branch}/version.json",
-            $"https://cdn.jsdelivr.net/gh/{repo}@{branch}/version.json",
-            $"https://testingcf.jsdelivr.net/gh/{repo}@{branch}/version.json",
-            $"https://gcore.jsdelivr.net/gh/{repo}@{branch}/version.json",
+            ($"https://api.github.com/repos/{repo}/contents/version.json?ref={branch}", true),
+            ($"https://raw.githubusercontent.com/{repo}/{branch}/version.json", false),
+            ($"https://fastly.jsdelivr.net/gh/{repo}@{branch}/version.json", false),
+            ($"https://cdn.jsdelivr.net/gh/{repo}@{branch}/version.json", false),
+            ($"https://testingcf.jsdelivr.net/gh/{repo}@{branch}/version.json", false),
+            ($"https://gcore.jsdelivr.net/gh/{repo}@{branch}/version.json", false),
         };
 
         var lastError = "";
         using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
         client.DefaultRequestHeaders.TryAddWithoutValidation(
             "User-Agent", $"GaokaoCountdown/{AppInfo.Version}");
-        foreach (var url in urls)
+        foreach (var (url, githubApi) in urls)
         {
             try
             {
-                var text = await client.GetStringAsync(url).ConfigureAwait(false);
+                string text;
+                if (githubApi)
+                {
+                    using var request = new HttpRequestMessage(HttpMethod.Get, url);
+                    request.Headers.TryAddWithoutValidation(
+                        "Accept", "application/vnd.github.raw");
+                    using var response = await client.SendAsync(request).ConfigureAwait(false);
+                    response.EnsureSuccessStatusCode();
+                    text = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                }
+                else
+                {
+                    text = await client.GetStringAsync(url).ConfigureAwait(false);
+                }
                 return new UpdateInfo(ExtractVersion(text), ExtractDownloadUrl(text));
             }
             catch (Exception ex)

@@ -54,6 +54,12 @@ var normalized = AppConfig.FromJson(json);
 Console.WriteLine($"normalized mode={normalized.ProgressStartMode} start={normalized.ProgressStart} " +
                   $"opacity={normalized.Opacity} events={normalized.Events.Count} dur={normalized.Events[0].DurationDays}");
 
+if (args.Contains("--fetch"))
+{
+    var live = await UpdateService.FetchLatestAsync(cfg);
+    Console.WriteLine($"live version={live.Version} url={live.DownloadUrl}");
+}
+
 var dumped = cfg.ToJson();
 Console.WriteLine("json len=" + dumped.Length);
 Console.WriteLine(dumped.Substring(0, Math.Min(160, dumped.Length)));
