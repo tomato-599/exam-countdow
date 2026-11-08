@@ -1,11 +1,11 @@
-; 高考倒计时 3.1.0（WinUI 3 重构版）—— Inno Setup 6 安装脚本
+; 高考倒计时 3.2.0（WinUI 3 重构版）—— Inno Setup 6 安装脚本
 ; 编译： tools\InnoSetup6\ISCC.exe installer.iss
 
 #define AppName "高考倒计时"
-#define AppVersion "3.1.0"
+#define AppVersion "3.2.0"
 ; VersionInfoVersion 必须是 X.X.X.X 纯数字，改版本时这几处一起改
-#define VersionNum "3.1.0.0"
-#define FileTag "3.1.0"
+#define VersionNum "3.2.0.0"
+#define FileTag "3.2.0"
 #define AppPublisher "李沐泽"
 #define AppExeName "ExamCountdown.exe"
 #define RunValueName "GaokaoCountdown"

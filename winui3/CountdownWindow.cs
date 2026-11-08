@@ -18,6 +18,7 @@ public sealed class CountdownWindow : Window
     private readonly AppConfig _cfg;
     private readonly IntPtr _hwnd;
     private readonly Border _card;
+    private readonly Border _imageLayer;
     private readonly RichTextBlock _rich;
     private readonly DispatcherQueueTimer _hoverTimer;
     private readonly DispatcherQueueTimer _dragTimer;
@@ -37,6 +38,7 @@ public sealed class CountdownWindow : Window
     private double _minHeight;
     private int _dragOffsetX;
     private int _dragOffsetY;
+    private string _imageSignature = "";
 
     public CountdownWindow(AppConfig cfg)
     {
@@ -53,18 +55,29 @@ public sealed class CountdownWindow : Window
 
         _rich = new RichTextBlock
         {
-            FontFamily = new FontFamily("Microsoft YaHei UI"),
+            FontFamily = new FontFamily(cfg.FontFamily),
             TextWrapping = TextWrapping.NoWrap,
             TextAlignment = TextAlignment.Center,
+            Margin = new Thickness(18, 9, 18, 9),
             IsTextSelectionEnabled = false,
         };
+
+        _imageLayer = new Border
+        {
+            CornerRadius = new CornerRadius(cfg.CornerRadius),
+            IsHitTestVisible = false,
+            Visibility = Visibility.Collapsed,
+        };
+
+        var content = new Grid();
+        content.Children.Add(_imageLayer);
+        content.Children.Add(_rich);
 
         _card = new Border
         {
             CornerRadius = new CornerRadius(cfg.CornerRadius),
             BorderThickness = new Thickness(0),
-            Padding = new Thickness(18, 9, 18, 9),
-            Child = _rich,
+            Child = content,
         };
         Content = _card;
 
@@ -211,12 +224,37 @@ public sealed class CountdownWindow : Window
 
     private void ApplyCardStyle()
     {
-        _card.CornerRadius = new CornerRadius(Math.Clamp(_cfg.CornerRadius, 0, 60));
+        var radius = Math.Clamp(_cfg.CornerRadius, 0, 60);
+        _card.CornerRadius = new CornerRadius(radius);
+        _imageLayer.CornerRadius = new CornerRadius(radius);
+        _rich.FontFamily = new FontFamily(
+            string.IsNullOrWhiteSpace(_cfg.FontFamily)
+                ? "Microsoft YaHei UI" : _cfg.FontFamily);
+
         var (_, bgHex) = Render.ResolveColors(_cfg, _dark);
         var background = ParseColor(bgHex);
         background.A = (byte)Math.Round(
             Math.Clamp(_cfg.Opacity, 0.15, 1.0) * 255);
         _card.Background = new SolidColorBrush(background);
+
+        var path = AppConfig.ResolveImagePath(_cfg.BackgroundImage);
+        var stamp = 0L;
+        try
+        {
+            if (path != null && File.Exists(path)) stamp = File.GetLastWriteTimeUtc(path).Ticks;
+        }
+        catch
+        {
+            // 路径不可访问时按无图片处理
+        }
+        var signature = $"{path}|{stamp}|{_cfg.BackgroundImageOpacity}|" +
+                        $"{_cfg.BackgroundImageStretch}|{_cfg.BackgroundImageAlignX}|" +
+                        $"{_cfg.BackgroundImageAlignY}";
+        if (signature == _imageSignature) return;
+        _imageSignature = signature;
+        var brush = Ui.CreateImageBrush(_cfg);
+        _imageLayer.Background = brush;
+        _imageLayer.Visibility = brush == null ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private void ResizeToContent()

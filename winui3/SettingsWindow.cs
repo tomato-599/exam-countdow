@@ -40,7 +40,16 @@ public sealed class SettingsWindow : Window
     private Slider _opacity = null!;
     private TextBlock _opacityText = null!;
     private NumberBox _cornerRadius = null!;
+    private TextBox _fontBox = null!;
+    private ComboBox _fontPreset = null!;
+    private TextBox _imagePathBox = null!;
+    private Slider _imageOpacity = null!;
+    private TextBlock _imageOpacityText = null!;
+    private ComboBox _imageStretch = null!;
+    private ComboBox _imageAlignX = null!;
+    private ComboBox _imageAlignY = null!;
     private TextBlock _preview = null!;
+    private Border _previewImageLayer = null!;
     private Border _previewCard = null!;
 
     private ToggleSwitch _autostart = null!;
@@ -289,17 +298,101 @@ public sealed class SettingsWindow : Window
         {
             FontSize = 18,
             TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(14, 10, 14, 10),
             Text = "距离高考还有 123 天",
         };
+        _previewImageLayer = new Border
+        {
+            CornerRadius = new CornerRadius(10),
+            IsHitTestVisible = false,
+        };
+        var previewGrid = new Grid();
+        previewGrid.Children.Add(_previewImageLayer);
+        previewGrid.Children.Add(_preview);
         _previewCard = new Border
         {
             CornerRadius = new CornerRadius(10),
             BorderThickness = new Thickness(1),
-            Padding = new Thickness(14, 10, 14, 10),
-            Child = _preview,
+            Child = previewGrid,
         };
         stack.Children.Add(_previewCard);
-        stack.Children.Add(Ui.Hint("预览仅示意当前模板与配色，实际尺寸以悬浮窗为准。"));
+        stack.Children.Add(Ui.Hint("预览仅示意模板、字体、背景与配色，实际尺寸以悬浮窗为准。"));
+
+        var fontBody = Ui.Stack(12);
+        _fontBox = Ui.Input("", "例如 Microsoft YaHei UI、SimHei、KaiTi");
+        Ui.AddRow(fontBody, "字体名称", _fontBox,
+            "填写系统已安装的字体；找不到时会自动回退到默认字体。");
+        _fontPreset = Ui.Combo(
+            ("微软雅黑 UI（默认）", "Microsoft YaHei UI"),
+            ("微软雅黑", "Microsoft YaHei"),
+            ("等线", "DengXian"),
+            ("黑体", "SimHei"),
+            ("宋体", "SimSun"),
+            ("楷体", "KaiTi"),
+            ("思源黑体", "Source Han Sans SC"),
+            ("Segoe UI", "Segoe UI"),
+            ("Consolas", "Consolas"));
+        Ui.AddRow(fontBody, "常用字体", _fontPreset, "选择后会填入上面的字体名称。");
+
+        _imagePathBox = Ui.Input("", @"例如 D:\图片\背景.jpg");
+        _imagePathBox.Width = 420;
+        var browse = new Button { Content = "浏览…" };
+        browse.Click += async (_, _) =>
+        {
+            var path = await FilePickers.PickImageAsync(this);
+            if (path != null)
+            {
+                _imagePathBox.Text = path;
+                UpdatePreview();
+            }
+        };
+        var clear = new Button { Content = "清除" };
+        clear.Click += (_, _) =>
+        {
+            _imagePathBox.Text = "";
+            UpdatePreview();
+        };
+        var imageRow = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 8,
+        };
+        imageRow.Children.Add(_imagePathBox);
+        imageRow.Children.Add(browse);
+        imageRow.Children.Add(clear);
+        Ui.AddRow(fontBody, "背景图片", imageRow,
+            "支持 png / jpg / jpeg / bmp / gif；可以写绝对路径，或相对配置目录的路径。");
+
+        _imageOpacity = new Slider
+        {
+            Minimum = 0,
+            Maximum = 100,
+            StepFrequency = 1,
+            Width = 320,
+        };
+        _imageOpacityText = Ui.Text("100%", 13);
+        var imageOpacityRow = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 12,
+        };
+        imageOpacityRow.Children.Add(_imageOpacity);
+        imageOpacityRow.Children.Add(_imageOpacityText);
+        Ui.AddRow(fontBody, "图片不透明度", imageOpacityRow);
+        stack.Children.Add(Ui.Card(fontBody));
+
+        var imageBody = Ui.Stack(12);
+        _imageStretch = Ui.Combo(
+            ("覆盖填充（保持比例）", "uniform_to_fill"),
+            ("适应（完整显示）", "uniform"),
+            ("拉伸铺满", "fill"),
+            ("原始大小", "none"));
+        Ui.AddRow(imageBody, "图片缩放", _imageStretch);
+        _imageAlignX = Ui.Combo(("左", "left"), ("中", "center"), ("右", "right"));
+        Ui.AddRow(imageBody, "水平位置", _imageAlignX);
+        _imageAlignY = Ui.Combo(("上", "top"), ("中", "center"), ("下", "bottom"));
+        Ui.AddRow(imageBody, "垂直位置", _imageAlignY);
+        stack.Children.Add(Ui.Card(imageBody));
 
         var body = Ui.Stack(12);
         _colorMode = Ui.Combo(
@@ -511,6 +604,13 @@ public sealed class SettingsWindow : Window
         _opacity.Value = Math.Round(cfg.Opacity * 100);
         _opacityText.Text = $"{(int)Math.Round(cfg.Opacity * 100)}%";
         _cornerRadius.Value = cfg.CornerRadius;
+        _fontBox.Text = cfg.FontFamily;
+        _imagePathBox.Text = cfg.BackgroundImage;
+        _imageOpacity.Value = Math.Round(cfg.BackgroundImageOpacity * 100);
+        _imageOpacityText.Text = $"{(int)Math.Round(cfg.BackgroundImageOpacity * 100)}%";
+        Ui.SelectTag(_imageStretch, cfg.BackgroundImageStretch);
+        Ui.SelectTag(_imageAlignX, cfg.BackgroundImageAlignX);
+        Ui.SelectTag(_imageAlignY, cfg.BackgroundImageAlignY);
 
         _autostart.IsOn = cfg.Autostart;
         _schoolDays.IsOn = cfg.SchoolDays;
@@ -562,6 +662,21 @@ public sealed class SettingsWindow : Window
         _zeroSize.ValueChanged += (_, _) => UpdatePreview();
         _urgentDays.ValueChanged += (_, _) => UpdatePreview();
         _cornerRadius.ValueChanged += (_, _) => UpdatePreview();
+        _fontBox.TextChanged += (_, _) => UpdatePreview();
+        _fontPreset.SelectionChanged += (_, _) =>
+        {
+            if (_fontPreset.SelectedItem is ComboBoxItem { Tag: string font })
+                _fontBox.Text = font;
+        };
+        _imagePathBox.TextChanged += (_, _) => UpdatePreview();
+        _imageOpacity.ValueChanged += (_, _) =>
+        {
+            _imageOpacityText.Text = $"{(int)Math.Round(_imageOpacity.Value)}%";
+            UpdatePreview();
+        };
+        _imageStretch.SelectionChanged += (_, _) => UpdatePreview();
+        _imageAlignX.SelectionChanged += (_, _) => UpdatePreview();
+        _imageAlignY.SelectionChanged += (_, _) => UpdatePreview();
         _opacity.ValueChanged += (_, _) =>
         {
             _opacityText.Text = $"{(int)Math.Round(_opacity.Value)}%";
@@ -675,6 +790,12 @@ public sealed class SettingsWindow : Window
         cfg.UrgentDays = Math.Max(1, Ui.IntValue(_urgentDays, 10));
         cfg.Opacity = Math.Clamp(_opacity.Value / 100.0, 0.15, 1.0);
         cfg.CornerRadius = Math.Clamp(Ui.IntValue(_cornerRadius, 14), 0, 60);
+        cfg.FontFamily = _fontBox.Text;
+        cfg.BackgroundImage = _imagePathBox.Text;
+        cfg.BackgroundImageOpacity = Math.Clamp(_imageOpacity.Value / 100.0, 0.0, 1.0);
+        cfg.BackgroundImageStretch = Ui.SelectedTag(_imageStretch, "uniform_to_fill");
+        cfg.BackgroundImageAlignX = Ui.SelectedTag(_imageAlignX, "center");
+        cfg.BackgroundImageAlignY = Ui.SelectedTag(_imageAlignY, "center");
 
         cfg.Autostart = _autostart.IsOn;
         cfg.SchoolDays = _schoolDays.IsOn;
@@ -705,12 +826,17 @@ public sealed class SettingsWindow : Window
             var days = Render.CountDays(cfg, cfg.Deadline);
             var text = Render.PlainText(cfg, days);
             _preview.Text = text.Length > 0 ? text : "（显示文字为空）";
+            _preview.FontFamily = new FontFamily(
+                string.IsNullOrWhiteSpace(cfg.FontFamily)
+                    ? "Microsoft YaHei UI" : cfg.FontFamily);
             var (textColor, bgColor) = Render.ResolveColors(cfg, Ui.Dark);
             _preview.Foreground = Ui.Brush(textColor);
             _previewCard.Background = Ui.Brush(bgColor,
                 (byte)Math.Round(cfg.Opacity * 255));
             _previewCard.BorderBrush = Ui.Brush(Ui.Dark ? "#565656" : "#D2D2D2");
             _previewCard.CornerRadius = new CornerRadius(cfg.CornerRadius);
+            _previewImageLayer.CornerRadius = new CornerRadius(cfg.CornerRadius);
+            _previewImageLayer.Background = Ui.CreateImageBrush(cfg);
         }
         catch
         {
@@ -747,6 +873,13 @@ public sealed class SettingsWindow : Window
         _opacity.Value = Math.Round(cfg.Opacity * 100);
         _opacityText.Text = $"{(int)Math.Round(cfg.Opacity * 100)}%";
         _cornerRadius.Value = cfg.CornerRadius;
+        _fontBox.Text = cfg.FontFamily;
+        _imagePathBox.Text = cfg.BackgroundImage;
+        _imageOpacity.Value = Math.Round(cfg.BackgroundImageOpacity * 100);
+        _imageOpacityText.Text = $"{(int)Math.Round(cfg.BackgroundImageOpacity * 100)}%";
+        Ui.SelectTag(_imageStretch, cfg.BackgroundImageStretch);
+        Ui.SelectTag(_imageAlignX, cfg.BackgroundImageAlignX);
+        Ui.SelectTag(_imageAlignY, cfg.BackgroundImageAlignY);
 
         _autostart.IsOn = cfg.Autostart;
         _schoolDays.IsOn = cfg.SchoolDays;

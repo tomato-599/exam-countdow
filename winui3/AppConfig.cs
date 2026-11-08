@@ -12,7 +12,7 @@ public static class AppInfo
 {
     public const string Id = "GaokaoCountdown";
     public const string Title = "高考倒计时";
-    public const string Version = "3.1.0";
+    public const string Version = "3.2.0";
     public const string Desc = "置顶悬浮的考试倒计时 · 希沃前台自动隐藏 · 托盘常驻";
     public const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
     public const string PersonalizeKey =
@@ -58,6 +58,7 @@ public sealed class AppConfig
     public int DurationDays { get; set; } = 1;
     public string ProgressStartMode { get; set; } = "school_year";
     public string ProgressStart { get; set; } = "";
+    public string FontFamily { get; set; } = "Microsoft YaHei UI";
     public string Template { get; set; } = "距离{name}还有 {time} 天";
     public string ZeroText { get; set; } = "旗开得胜";
     public string OngoingText { get; set; } = "考试进行中 · 第{day}天";
@@ -72,6 +73,11 @@ public sealed class AppConfig
     public string BgColor { get; set; } = "#FFFFFF";
     public double Opacity { get; set; } = 0.92;
     public int CornerRadius { get; set; } = 14;
+    public string BackgroundImage { get; set; } = "";
+    public double BackgroundImageOpacity { get; set; } = 1.0;
+    public string BackgroundImageStretch { get; set; } = "uniform_to_fill";
+    public string BackgroundImageAlignX { get; set; } = "center";
+    public string BackgroundImageAlignY { get; set; } = "center";
     public bool Autostart { get; set; } = true;
     public string PasswordHash { get; set; } = "";
     public int MarginX { get; set; } = 28;
@@ -121,6 +127,7 @@ public sealed class AppConfig
         ["duration_days"] = DurationDays,
         ["progress_start_mode"] = ProgressStartMode,
         ["progress_start"] = ProgressStart,
+        ["font_family"] = FontFamily,
         ["template"] = Template,
         ["zero_text"] = ZeroText,
         ["ongoing_text"] = OngoingText,
@@ -135,6 +142,11 @@ public sealed class AppConfig
         ["bg_color"] = BgColor,
         ["opacity"] = Opacity,
         ["corner_radius"] = CornerRadius,
+        ["background_image"] = BackgroundImage,
+        ["background_image_opacity"] = BackgroundImageOpacity,
+        ["background_image_stretch"] = BackgroundImageStretch,
+        ["background_image_align_x"] = BackgroundImageAlignX,
+        ["background_image_align_y"] = BackgroundImageAlignY,
         ["autostart"] = Autostart,
         ["password_hash"] = PasswordHash,
         ["margin_x"] = MarginX,
@@ -180,6 +192,12 @@ public sealed class AppConfig
         ("bg_color", "自定义模式下的背景颜色"),
         ("opacity", "背景不透明度，0.15 ~ 1.0"),
         ("corner_radius", "悬浮窗圆角半径（px），0 ~ 60；0 为直角"),
+        ("font_family", "悬浮窗字体名称，例如 Microsoft YaHei UI、SimHei；找不到时回退默认字体"),
+        ("background_image", "背景图片路径（png/jpg/jpeg/bmp），绝对路径或相对配置目录"),
+        ("background_image_opacity", "背景图片不透明度，0 ~ 1"),
+        ("background_image_stretch", "背景图片缩放：uniform（适应）/ uniform_to_fill（覆盖）/ fill（拉伸）/ none（原始大小）"),
+        ("background_image_align_x", "背景图片水平位置：left / center / right"),
+        ("background_image_align_y", "背景图片垂直位置：top / center / bottom"),
         ("autostart", "是否开机自动启动（true / false）"),
         ("password_hash", "设置密码的 PBKDF2 哈希；留空表示不启用密码保护"),
         ("margin_x", "悬浮窗距离屏幕右边距（px）"),
@@ -216,6 +234,7 @@ public sealed class AppConfig
         cfg.ProgressStart = DateOrEmpty(Str(obj, "progress_start", ""));
         if (cfg.ProgressStartMode == "custom" && cfg.ProgressStart.Length == 0)
             cfg.ProgressStart = DateTime.Today.ToString("yyyy-MM-dd");
+        cfg.FontFamily = FontOr(Str(obj, "font_family", cfg.FontFamily));
         cfg.Template = Str(obj, "template", cfg.Template);
         if (cfg.Template.Length == 0) cfg.Template = "{time}";
         cfg.ZeroText = Str(obj, "zero_text", cfg.ZeroText);
@@ -227,6 +246,18 @@ public sealed class AppConfig
         cfg.UrgentDays = ClampInt(obj, "urgent_days", 1, 365, 10);
         cfg.Opacity = ClampDouble(obj, "opacity", 0.15, 1.0, 0.92);
         cfg.CornerRadius = ClampInt(obj, "corner_radius", 0, 60, 14);
+        cfg.BackgroundImage = ImagePathOr(Str(obj, "background_image", ""));
+        cfg.BackgroundImageOpacity = ClampDouble(
+            obj, "background_image_opacity", 0.0, 1.0, 1.0);
+        var stretch = Str(obj, "background_image_stretch", "uniform_to_fill").Trim();
+        cfg.BackgroundImageStretch = stretch is "uniform" or "uniform_to_fill"
+            or "fill" or "none" ? stretch : "uniform_to_fill";
+        var alignX = Str(obj, "background_image_align_x", "center").Trim();
+        cfg.BackgroundImageAlignX = alignX is "left" or "center" or "right"
+            ? alignX : "center";
+        var alignY = Str(obj, "background_image_align_y", "center").Trim();
+        cfg.BackgroundImageAlignY = alignY is "top" or "center" or "bottom"
+            ? alignY : "center";
         cfg.MarginX = ClampInt(obj, "margin_x", 0, 4000, 28);
         cfg.MarginY = ClampInt(obj, "margin_y", 0, 4000, 24);
         cfg.ColorMode = Str(obj, "color_mode", "system") == "custom" ? "custom" : "system";
@@ -381,6 +412,35 @@ public sealed class AppConfig
                     CultureInfo.InvariantCulture, out var parsed))
                 return Math.Clamp(parsed, low, high);
             return fallback;
+        }
+    }
+
+    private static string FontOr(string value)
+    {
+        var text = (value ?? "").Trim();
+        text = new string(text.Where(c => !char.IsControl(c)).ToArray());
+        if (text.Length > 80) text = text[..80];
+        return text.Length > 0 ? text : "Microsoft YaHei UI";
+    }
+
+    private static string ImagePathOr(string value)
+    {
+        var text = (value ?? "").Trim().Trim('"');
+        return text.Length > 512 ? text[..512] : text;
+    }
+
+    /// <summary>把配置里的图片路径解析成绝对路径；相对路径按配置目录解析。</summary>
+    public static string? ResolveImagePath(string? value)
+    {
+        var text = (value ?? "").Trim().Trim('"');
+        if (text.Length == 0) return null;
+        try
+        {
+            return Path.IsPathRooted(text) ? text : Path.Combine(ConfigStore.ConfigDir, text);
+        }
+        catch
+        {
+            return null;
         }
     }
 

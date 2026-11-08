@@ -54,6 +54,10 @@ var normalized = AppConfig.FromJson(json);
 Console.WriteLine($"normalized mode={normalized.ProgressStartMode} start={normalized.ProgressStart} " +
                   $"opacity={normalized.Opacity} events={normalized.Events.Count} dur={normalized.Events[0].DurationDays}");
 
+var look = AppConfig.FromJson("""{"font_family":"","background_image_opacity":2,"background_image_stretch":"bad","background_image_align_x":"right"}""");
+Console.WriteLine("look font=" + look.FontFamily + " imgOpacity=" + look.BackgroundImageOpacity +
+                  " stretch=" + look.BackgroundImageStretch + " alignX=" + look.BackgroundImageAlignX);
+
 if (args.Contains("--fetch"))
 {
     var live = await UpdateService.FetchLatestAsync(cfg);

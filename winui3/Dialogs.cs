@@ -422,6 +422,27 @@ public static class FilePickers
         }
     }
 
+    public static async Task<string?> PickImageAsync(Window owner)
+    {
+        try
+        {
+            var picker = new FileOpenPicker
+            {
+                SuggestedStartLocation = PickerLocationId.PicturesLibrary,
+            };
+            foreach (var ext in new[] { ".png", ".jpg", ".jpeg", ".bmp", ".gif" })
+                picker.FileTypeFilter.Add(ext);
+            InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(owner));
+            var file = await picker.PickSingleFileAsync();
+            return file?.Path;
+        }
+        catch (Exception ex)
+        {
+            ConfigStore.LogError("选择背景图片失败:\n" + ex);
+            return null;
+        }
+    }
+
     public static async Task<string?> PickExportAsync(Window owner, string suggestedName)
     {
         try

@@ -3,6 +3,7 @@ using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.Graphics;
 using WinRT.Interop;
 
@@ -228,4 +229,43 @@ internal static class Ui
 
     public static string Hex(Windows.UI.Color color)
         => $"#{color.R:X2}{color.G:X2}{color.B:X2}";
+
+    public static ImageBrush? CreateImageBrush(AppConfig cfg)
+    {
+        var path = AppConfig.ResolveImagePath(cfg.BackgroundImage);
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return null;
+        try
+        {
+            var image = new BitmapImage { UriSource = new Uri(path) };
+            return new ImageBrush
+            {
+                ImageSource = image,
+                Stretch = cfg.BackgroundImageStretch switch
+                {
+                    "uniform" => Stretch.Uniform,
+                    "fill" => Stretch.Fill,
+                    "none" => Stretch.None,
+                    _ => Stretch.UniformToFill,
+                },
+                AlignmentX = cfg.BackgroundImageAlignX switch
+                {
+                    "left" => AlignmentX.Left,
+                    "right" => AlignmentX.Right,
+                    _ => AlignmentX.Center,
+                },
+                AlignmentY = cfg.BackgroundImageAlignY switch
+                {
+                    "top" => AlignmentY.Top,
+                    "bottom" => AlignmentY.Bottom,
+                    _ => AlignmentY.Center,
+                },
+                Opacity = Math.Clamp(cfg.BackgroundImageOpacity, 0.0, 1.0),
+            };
+        }
+        catch (Exception ex)
+        {
+            ConfigStore.LogError("加载背景图片失败:\n" + ex);
+            return null;
+        }
+    }
 }
