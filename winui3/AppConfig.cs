@@ -12,7 +12,7 @@ public static class AppInfo
 {
     public const string Id = "GaokaoCountdown";
     public const string Title = "高考倒计时";
-    public const string Version = "3.2.0";
+    public const string Version = "3.2.10";
     public const string Desc = "置顶悬浮的考试倒计时 · 希沃前台自动隐藏 · 托盘常驻";
     public const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
     public const string PersonalizeKey =

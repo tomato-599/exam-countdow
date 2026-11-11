@@ -1,4 +1,4 @@
-# 高考倒计时 3.2.0（WinUI 3 重构版）
+# 高考倒计时 3.2.10（WinUI 3 重构版）
 
 原 PyQt6 版本的完全重构：界面改用 **WinUI 3（Windows App SDK）**，业务逻辑用 C# 重写，独立放在 `winui3/` 目录，不影响根目录的 1.x 版本。
 
@@ -48,6 +48,14 @@ winui3/
 └─ tests/LogicTests/        纯逻辑测试（配置、渲染、节假日、密码）
 ```
 
+## 运行环境
+
+- Windows 10 1809（build 17763）或更高版本，仅支持 64 位（Windows 11 也可）
+- **.NET 8 Desktop Runtime（x64）**：不再随安装包自带，需要单独安装  
+  下载：https://dotnet.microsoft.com/en-us/download/dotnet/8.0/runtime
+- Windows App SDK 已随程序自带，无需额外安装
+- 安装程序会自动结束正在运行的新版 / 旧版倒计时；检测不到 .NET 8 Desktop Runtime 时会提示下载地址
+
 ## 构建与运行
 
 需要 .NET 8 SDK；可用 dotnet-install 把便携版装到非系统盘（本机在 `D:\Tools\dotnet8\dotnet.exe`），再用其中的 `dotnet.exe` 构建。
@@ -96,7 +104,7 @@ winui3\bin\x64\Release\net8.0-windows10.0.19041.0\win-x64\ExamCountdown.exe
 - 设置窗口、密码框、JSON 编辑器、关于页统一为置顶窗口（原版即为置顶，避免被桌面层遮挡）
 - 设置界面由 Qt 表单改为 WinUI NavigationView 分页，带实时文字预览
 - 托盘菜单、自启动、单实例互斥体名称保持不变
-- 版本号从 1.1.0 提升到 3.2.0，配置无需迁移
+- 版本号从 1.1.0 提升到 3.2.10，配置无需迁移
 
 ## 测试
 
